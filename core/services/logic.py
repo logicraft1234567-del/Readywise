@@ -71,5 +71,14 @@ SEED_VOICE = {"Tom": "troy", "Mask": "austin", "Sarah": "hannah", "Alex": "danie
 def ensure_seed():
     q = Interviewer.objects.filter(owner=None)
     if q.count() == len(SEED) and q.filter(name="Michael", position="Visa Officer").exclude(rubric="").exists() and q.filter(name="Tom", voice_name="troy").exists(): return
+    seen = set()  # two first visits on a fresh database can each create the panel; keep one copy of each interviewer
+    for iv in q.order_by("id"):
+        if iv.name in seen: iv.delete()
+        else: seen.add(iv.name)
     for r in SEED:
-        Interviewer.objects.update_or_create(owner=None, name=r[0], defaults=dict(position=r[1], personality=r[2], style=r[3], expertise=r[4], responsibilities=r[5], objectives=r[6], difficulty=r[7], image=r[8], gender=r[9], pitch=r[10], rate=r[11], focus=r[12], voice_name=SEED_VOICE.get(r[0], "troy"), question_bank=BANKS[r[0]][0], rubric=BANKS[r[0]][1]))
+        vals = dict(position=r[1], personality=r[2], style=r[3], expertise=r[4], responsibilities=r[5], objectives=r[6], difficulty=r[7], image=r[8], gender=r[9], pitch=r[10], rate=r[11], focus=r[12], voice_name=SEED_VOICE.get(r[0], "troy"), question_bank=BANKS[r[0]][0], rubric=BANKS[r[0]][1])
+        iv = Interviewer.objects.filter(owner=None, name=r[0]).order_by("id").first()
+        if iv:
+            for k, v in vals.items(): setattr(iv, k, v)
+            iv.save()
+        else: Interviewer.objects.create(owner=None, name=r[0], **vals)
