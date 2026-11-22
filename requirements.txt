@@ -1,0 +1,12 @@
+Django>=5.0
+djangorestframework>=3.15
+celery>=5.4
+redis>=5.0
+PyMuPDF>=1.24
+python-docx>=1.1
+whitenoise>=6.6
+gunicorn>=22
+psycopg[binary]>=3.1
+pytest>=8
+pytest-django>=4.8
+youtube-transcript-api>=1.0

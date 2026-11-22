@@ -1,0 +1,63 @@
+{% extends 'core/app_base.html' %}{% load static %}{% block title %}Interview room: ReadyWise{% endblock %}{% block shellcls %}focus{% endblock %}
+{% block head %}<link rel="stylesheet" href="{% static 'css/room.css' %}"><script src="{% static 'js/intro.js' %}"></script><script src="{% static 'js/voice.js' %}"></script><script src="{% static 'js/bench.js' %}"></script><script src="{% static 'vendor/faceapi/face-api.js' %}" defer></script>{% endblock %}
+{% block actions %}<a class="btn sm" href="{% url 'ws' ws.pk %}"><i data-lucide="log-out" width="14"></i>Leave room</a>{% endblock %}
+{% block content %}
+<div class="rm" id="rm">
+
+<section id="setup" class="rm-setup" aria-labelledby="setup-h">
+  <div>
+    <h1 id="setup-h">{{ ws.title }}</h1>
+    <p class="sub">{{ ws.duration }} minute interview, {{ s.mode }} mode.{% if limit %} You have {{ limit }} seconds per answer.{% endif %} Your panel is set by ReadyWise for this interview. Check your camera and microphone, then join.</p>
+    <h2 style="margin:0 0 .6rem;font-size:.95rem;font-weight:600">Your panel</h2><div class="rm-people" id="people">{% for i in panel %}<div class="rm-person on" data-i="{{ forloop.counter0 }}"><img src="{% static i.image %}" alt=""><div><b>{{ i.name }}</b><small>{{ i.position }}. {{ i.responsibilities|truncatechars:110 }}</small></div></div>{% endfor %}</div>
+  </div>
+  <div class="rm-check">
+    <div class="rm-me"><video id="pre" autoplay muted playsinline></video></div>
+    <div class="rm-row" id="chk-cam"><i class="dot"></i><span class="grow">Camera: not checked</span></div>
+    <div class="rm-row" id="chk-mic"><i class="dot"></i><div class="grow"><span id="mic-t">Microphone: not checked</span><div class="rm-meter"><i id="meter"></i></div></div></div>
+    <div class="rm-row" id="chk-stt"><i class="dot"></i><span class="grow">Speech to text: checked on the first thing you say</span></div>
+    <div class="rm-opts">
+      <label><input type="checkbox" id="allowint"><span>Let me interrupt by speaking. Headphones only. You can always press Interrupt.</span></label>
+      <label><input type="checkbox" id="autosend" checked><span>Send my answer when I pause for <select id="pause" aria-label="Pause length"><option value="1300">1.3 s</option><option value="1800" selected>1.8 s</option><option value="2600">2.6 s</option><option value="3800">3.8 s</option></select></span></label>
+      <label><input type="checkbox" id="vtrack" checked><span>Face, eye-contact and expression tracking. Runs in your browser, nothing is uploaded.</span></label>
+      <label><input type="checkbox" id="consent"><span>Record this session so I can replay it. Recordings stay in your account.</span></label>
+      <label><input type="checkbox" id="vconsent"><span>Let ReadyWise analyse up to 5 camera snapshots for presentation feedback. They are sent to Groq and not stored.</span></label>
+    </div>
+    <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.3rem"><button class="rm-btn" onclick="checkDevices()"><i data-lucide="mic" width="16"></i>Check camera and microphone</button><button class="rm-btn go" id="go" onclick="begin()"><i data-lucide="play" width="16"></i>Join interview</button></div>
+  </div>
+</section>
+
+<section id="live" class="rm-live hidden" aria-label="Interview in progress">
+  <header class="rm-top">
+    <span class="t">{{ ws.title }}</span>
+    <div class="rm-prog"><div class="lbl"><span id="qlabel">Introductions</span><span id="limitbox"></span></div><div class="bar"><i id="pbar"></i></div></div>
+    <span class="rm-clock" id="clock">00:00</span>
+  </header>
+  <nav class="rm-ctl" aria-label="Interview controls">
+    <button class="rm-btn rm-mic" id="micbtn" onclick="toggleMute()" aria-label="Mute microphone" title="Mute microphone"><i data-lucide="mic" width="18"></i><span>Mute</span></button>
+    <button class="rm-btn" id="stopbtn" onclick="bargeIn(true)" title="Stop the interviewer and answer now"><i data-lucide="hand" width="18"></i><span>Interrupt</span></button>
+    <button class="rm-btn go" id="send" onclick="doneAnswering()" title="Send your answer"><i data-lucide="check" width="18"></i><span>Done answering</span></button>
+    <button class="rm-btn" id="kbbtn" onclick="toggleType()" aria-label="Type instead" title="Type instead"><i data-lucide="keyboard" width="18"></i><span>Type</span></button>
+    <button class="rm-btn rm-toggle-log" onclick="document.getElementById('log').classList.add('open')" aria-label="Open transcript" title="Transcript"><i data-lucide="captions" width="18"></i><span>Transcript</span></button>
+    <button class="rm-btn end" onclick="finish()" title="End the interview"><i data-lucide="log-out" width="18"></i><span>End interview</span></button>
+  </nav>
+  <div class="rm-stagecol">
+    <div class="rm-arena">
+      <div class="rm-stage" id="stage"></div>
+      <div class="rm-me-pip" id="pip"><video id="me" autoplay muted playsinline></video><div class="chip" id="vchip">Camera off</div><div class="rm-plate"><div class="who"><b>You</b></div></div></div>
+    </div>
+    <div class="rm-bench" id="bench"><div class="rm-brief"><h3 id="b-title"></h3><p id="b-brief"></p><div class="clock" id="b-clock"></div></div>
+      <div class="rm-work"><div class="rm-wbar"><select id="b-lang" aria-label="Language"><option value="javascript">JavaScript (checks run here)</option><option value="python">Python</option><option value="java">Java</option><option value="cpp">C++</option><option value="sql">SQL</option><option value="other">Other</option></select><span class="grow" id="b-note"></span><button class="rm-btn" id="b-run" onclick="runChecks()"><i data-lucide="play" width="14"></i>Run checks</button><button class="rm-btn go" onclick="submitBuild()"><i data-lucide="send" width="14"></i>Submit solution</button></div>
+      <textarea class="rm-code" id="b-code" spellcheck="false" autocapitalize="off" aria-label="Your solution"></textarea><div class="rm-res" id="b-res" aria-live="polite"></div></div></div>
+    <div class="rm-cap" aria-live="polite"><p id="cap"></p></div>
+    <div class="rm-type" id="typebox"><textarea id="typed" rows="2" placeholder="Type your answer" aria-label="Type your answer"></textarea><button class="rm-btn go" onclick="sendTyped()">Send</button></div>
+    <div class="rm-status" id="state" role="status">Starting…</div>
+  </div>
+  <aside class="rm-log" id="log" aria-label="Transcript"><h2>Transcript<button onclick="document.getElementById('log').classList.remove('open')" aria-label="Close transcript"><i data-lucide="x" width="18"></i></button></h2><div class="rm-msgs" id="msgs"></div><div class="rm-live-cap" id="live-text"></div></aside>
+</section>
+</div>
+
+<script>
+const PANEL_ALL={{ panel_json|safe }},LIMIT={{ limit }},SID={{ s.pk }},DUR={{ ws.duration }},NON_EN={% if lang != "English" %}true{% else %}false{% endif %},VMODEL="{% static 'vendor/faceapi/model' %}",REC_LANG="{{ rec_lang }}";
+</script>
+<script src="{% static 'js/room.js' %}"></script>
+{% endblock %}

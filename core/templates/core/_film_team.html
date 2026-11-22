@@ -1,0 +1,1 @@
+{% load static %}<div id="film-team" hidden>{% for i in team|slice:":3" %}<span data-n="{{ i.name }}" data-r="{{ i.position }}" data-img="{% static i.image %}"></span>{% endfor %}</div>

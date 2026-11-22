@@ -1,0 +1,17 @@
+{% extends 'core/app_base.html' %}{% block title %}Profile: ReadyWise{% endblock %}{% block content %}
+<a class="wz-banner glass" href="{% url 'welcome' %}" style="margin-bottom:1rem"><span class="wb-orb"></span><span><b>Prefer one question at a time?</b><small>Open the guided set-up.</small></span><span class="wb-go">Open →</span></a>
+<h1 class="text-4xl">Your candidate profile</h1><p style="color:var(--mut)">Every agent reads this, so the more specific you are, the better the questions.</p>
+<div class="grid lg:grid-cols-3 gap-6 mt-6"><form method="post" enctype="multipart/form-data" class="glass p-8 lg:col-span-2">{% csrf_token %}
+<div class="grid g2"><div><label class="l">Full name</label><input class="field" name="full_name" value="{{ p.full_name }}" placeholder="How the panel should address you"></div>
+<div><label class="l">Interview language</label><select class="field" name="language">{% for l in langs %}<option {% if l == p.language %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+<div><label class="l">Preferred interviewer style</label><select class="field" name="style"><option value="friendly" {% if p.style == "friendly" %}selected{% endif %}>Friendly and encouraging</option><option value="balanced" {% if p.style == "balanced" %}selected{% endif %}>Balanced</option><option value="strict" {% if p.style == "strict" %}selected{% endif %}>Strict and exacting</option></select></div></div>
+<p class="text-xs mt-1" style="color:var(--mut)">Voice recognition may not support every language in your browser. Typing your answers always works.</p>
+<label class="l">Education</label><textarea class="field" name="education" rows="2">{{ p.education }}</textarea><label class="l">Work experience</label><textarea class="field" name="experience" rows="3">{{ p.experience }}</textarea>
+<label class="l">Skills</label><input class="field" name="skills" value="{{ p.skills }}"><label class="l">Career interests</label><input class="field" name="interests" value="{{ p.interests }}">
+<label class="l">CV (PDF or Word){% if p.cv_text %} <span class="tag t-confirmed">uploaded</span>{% endif %}</label><input class="field" type="file" name="cv" accept=".pdf,.docx,.txt">
+<div class="flex gap-3 mt-6"><button class="btn solid">Save profile</button>{% if p.cv_text %}<button class="btn" name="reanalyse" value="1">Save and re-analyse CV</button>{% endif %}</div></form>
+<div class="glass p-6 h-fit"><h2 class="text-lg">CV analysis</h2>{% if p.cv_profile %}<p class="text-sm mt-2">{{ p.cv_profile.summary }}</p>{% if p.cv_profile.seniority %}<span class="chip mt-3">{{ p.cv_profile.seniority }}</span>{% endif %}
+<h3 class="text-sm mt-4">Skills</h3><div class="flex flex-wrap gap-2 mt-1">{% for s in p.cv_profile.skills %}<span class="chip">{{ s }}</span>{% endfor %}</div>
+<h3 class="text-sm mt-4">Strengths</h3><ul class="list-disc pl-5 text-sm">{% for s in p.cv_profile.strengths %}<li>{{ s }}</li>{% endfor %}</ul>
+<h3 class="text-sm mt-4">Gaps interviewers may probe</h3><ul class="list-disc pl-5 text-sm">{% for s in p.cv_profile.gaps %}<li>{{ s }}</li>{% endfor %}</ul>
+{% else %}<p class="text-sm mt-2" style="color:var(--mut)">Upload your CV and ReadyWise turns it into a structured profile: skills, experience, strengths and gaps. Interviewers use it to ask about your real background.</p>{% endif %}</div></div>{% endblock %}

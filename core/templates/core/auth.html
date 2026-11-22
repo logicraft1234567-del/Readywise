@@ -1,0 +1,14 @@
+{% extends 'core/base.html' %}{% load static %}{% block title %}{% if mode == 'register' %}Create account{% else %}Log in{% endif %}: ReadyWise{% endblock %}
+{% block head %}<link rel="stylesheet" href="{% static 'css/landing.css' %}"><style>.nav{display:none}</style>{% endblock %}
+{% block body %}<div class="au">
+<aside class="au-art"><a class="logo" href="{% url 'landing' %}"><img src="{% static 'img/mark.svg' %}" alt="">ReadyWise</a>
+ <div><h2>Walk in already ready.</h2><ul><li><i data-lucide="check" width="18"></i>Research with sources, each marked confirmed, candidate-reported or inferred.</li><li><i data-lucide="check" width="18"></i>A panel of up to three interviewers, chosen from your research.</li><li><i data-lucide="check" width="18"></i>A plan that rewrites itself when you struggle or miss a day.</li></ul></div>
+ <div class="faces" aria-hidden="true">{% for i in team %}<img src="{% static i.image %}" alt="">{% endfor %}</div></aside>
+<div class="au-form"><form method="post">{% csrf_token %}
+ <a class="logo lg:hidden" href="{% url 'landing' %}" style="margin-bottom:2rem"><img src="{% static 'img/mark.svg' %}" alt="">ReadyWise</a>
+ <h1>{% if mode == 'register' %}Create your account{% else %}Welcome back{% endif %}</h1>
+ <p class="sub">{% if mode == 'register' %}Set up your first interview workspace in a minute.{% else %}Log in to continue your preparation.{% endif %}</p>
+ <label class="l" for="u">Username</label><input id="u" class="field" name="username" required autofocus autocomplete="username">{% if mode == 'register' %}<label class="l" for="e">Email</label><input id="e" class="field" type="email" name="email" autocomplete="email">{% endif %}
+ <label class="l" for="p">Password</label><input id="p" class="field" type="password" name="password" required autocomplete="{% if mode == 'register' %}new-password{% else %}current-password{% endif %}">
+ <button class="btn solid w-full" style="margin-top:1.5rem;padding:.8rem">{% if mode == 'register' %}Create account{% else %}Log in{% endif %}</button>
+ <p class="text-sm" style="margin-top:1.1rem;color:var(--mut)">{% if mode == 'register' %}Already registered? <a class="font-semibold" style="color:var(--b1)" href="{% url 'login' %}">Log in</a>{% else %}New here? <a class="font-semibold" style="color:var(--b1)" href="{% url 'register' %}">Create an account</a>{% endif %}</p></form></div></div>{% endblock %}
