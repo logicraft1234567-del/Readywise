@@ -371,11 +371,15 @@ def close_window(ws):
 
 _FAREWELL = {"English": "That brings us to the end of our time. Thank you for speaking with us today. We will review everything and be in touch about the next steps. Goodbye, and take care."}
 
-def close_text(text, lang="English"):
+_WANTS_END = re.compile(r"\b(i(?:'m| am) (?:done|finished)|(?:we|i)(?:'re| are)? (?:done|finished)|that(?:'s| is) (?:all|it) from me|let(?:'s| us) (?:stop|end|finish)|(?:can|could) we (?:stop|end|finish)|i (?:want|would like|need) to (?:stop|end|leave|go)|end (?:the|this) (?:interview|meeting|call)|i(?:'ll| will) (?:stop|leave) here)\b", re.I)
+_CONDUCT_END = "I am ending this interview here because the conversation has not stayed professional. Thank you for your time. Goodbye."
+
+def close_text(text, lang="English", reason="finished"):
     """The closing words never ask anything: a question would be left hanging because the meeting ends right after. Question sentences are removed;
     if nothing is left, a plain closing is used."""
     parts = re.split(r"(?<=[.!?])\s+", " ".join(str(text or "").split()))
     kept = " ".join(x for x in parts if x and not x.rstrip().endswith("?")).strip()
+    if reason == "unprofessional": return kept if len(kept.split()) >= 8 else _CONDUCT_END
     return kept if len(kept.split()) >= 6 else _FAREWELL.get(lang, _FAREWELL["English"])
 
 def next_turn(sess, elapsed):
@@ -410,6 +414,7 @@ Return JSON only: {{"text": str}}"""
             return t, False, False
     if not sess.agenda: build_agenda(sess, panel)
     agenda = list(sess.agenda); cur = _cur(agenda)
+    agenda_done = cur is None
     if cur is None and not closing:   # every planned area is done and time is left: one more round, on the weakest evidence so far
         agenda.append({"owner": panel[len(asked) % len(panel)].id, "area": "Challenge the weakest or least supported claim so far", "goal": "Press on what the panel noted as unanswered or contradicted.", "tries": 0, "done": False}); cur = agenda[-1]
     convo = "\n".join(f"{(t.speaker.name if t.speaker else 'CANDIDATE')}: {t.text}" for t in turns[-10:]) or "(interview has not started)"
@@ -425,10 +430,10 @@ Return JSON only: {{"text": str}}"""
     if cur: cur["tries"] = sum(1 for t in asked if t.topic == cur["area"][:120])   # questions already spent on this area
     must_advance = bool(cur) and (cur.get("tries", 0) >= MAX_TRIES or nonans)
     nxt = next((a for a in agenda if a is not cur and not a.get("done")), None)
-    if closing: phase = "CLOSING: the time is up. Close the meeting the way a real interview ends, in 2 to 4 short sentences: a brief remark on the conversation, thank the candidate (speak for the whole panel if there is more than one of you), say what happens next in this process, and say goodbye. Do NOT ask any question of any kind, not even 'do you have any questions': the meeting ends as soon as you finish speaking. Set end=true."
+    if closing: phase = "CLOSING: the time is up. Close the meeting the way a real interview ends, in 2 to 4 short sentences: a brief remark on the conversation, thank the candidate (speak for the whole panel if there is more than one of you), say what happens next in this process, and say goodbye. Do NOT ask any question of any kind, not even 'do you have any questions': the meeting ends as soon as you finish speaking. Set end_reason=\"finished\"."
     elif unclear: phase = "UNCLEAR ANSWER. The last transcript is too thin to be an answer."
     elif must_advance: phase = "MOVE ON: the current area has had its attempts or the candidate said they do not know or do not have it. Treat that as a finding. Take the NEXT agenda item with its owner."
-    else: phase = "MIDDLE: follow the agenda. The interview is NOT over: there is still time. Never say goodbye, never thank them for their time and never wrap up. Ask your question and wait for the answer. Set end=false."
+    else: phase = "MIDDLE: follow the agenda. The interview is NOT over: there is still time. Do not say goodbye or wrap up unless you are ending the interview under the END RULES. Otherwise ask your question and wait for the answer."
     if submitted: heard_rule = ("THE CANDIDATE SUBMITTED THEIR SOLUTION to the hands-on task (" + str(sess.challenge.get("title", "")) + ") . Their work, exactly as submitted, including the result of the automatic checks if any:\n" + last_txt[:3500]
                                 + "\nReview it like a real interviewer: react to something concrete in it and ask ONE question about a trade-off, an edge case or how they would improve it. Copy the few words you are reacting to into the \"heard\" field. Never claim the code does something it does not.")
     elif not last_c: heard_rule = "There is no candidate answer yet."
@@ -456,9 +461,10 @@ PHASE: {phase}
 {extra}
 HOW TO CHOOSE THE SPEAKER AND THE MOVE: follow the plan. "followup" means you stay on the NOW item: the speaker is its owner. "advance" means the NOW item is finished (answered well enough, or exhausted): the speaker is the owner of the next item and the question opens that area{f" (next item: {nxt['area']})" if nxt else ""}. If the last answer was weak or vague on the NOW item and attempts are left, use "followup". A panel member who does not own the item may step in ONLY when a verified fact, or a contradiction with what that member heard or with the documents, must be put to the candidate at once ("interject": true); that member must be named in speaker_id and may not repeat anything already asked. Never let the same member speak more than twice in a row on a panel of two or more unless it is a follow-up on their own area.
 {PROCEDURE}
+END RULES: you may end the interview yourself, in exactly two cases. (1) end_reason="finished": the candidate has clearly said they are done or want to stop, or every planned area is covered and the time is nearly used. Your text is then a short professional closing (a remark, thanks, what happens next, goodbye). (2) end_reason="unprofessional": the candidate is abusive, insulting, harassing, sexual, threatening or discriminatory, or keeps refusing to take the interview seriously (jokes, trolling, deliberate nonsense). The FIRST time, do not end it: say calmly in one or two sentences that this is a professional interview and you need it to stay that way, set warn=true and carry on with your question. End it only if it continues after a warning (conduct warnings given so far: {(sess.assessment or {}).get("conduct_warnings", 0)}), or at once with severe=true for threats, slurs, sexual harassment or hate. When ending, your text is a calm, firm, polite statement that you are ending the interview because the conversation has not stayed professional, then thanks and goodbye. Never end for nerves, silence, "I don't know", weak or wrong answers, or criticism of the process: those are not unprofessional. In both cases the text contains NO question. Otherwise end_reason is "".
 The candidate's words come from automatic speech recognition: ignore misspellings and misheard names (including yours); never correct the candidate's spelling.
 {CONDUCT}
-Return JSON only: {{"speaker_id": int, "move": "followup|advance", "interject": bool, "text": str, "heard": str, "basis": "details|research|job_description|answer|verified_fact", "topic": str, "followup": bool, "end": bool,
+Return JSON only: {{"speaker_id": int, "move": "followup|advance", "interject": bool, "text": str, "heard": str, "basis": "details|research|job_description|answer|verified_fact", "topic": str, "followup": bool, "end_reason": "" | "finished" | "unprofessional", "warn": bool, "severe": bool,
 "notes": {{"claims": [up to 3 short factual claims the candidate just made that still need verifying, empty if none], "gaps": [up to 2 things unanswered, missing or vague, empty if none]}},
 "assessment": null when there is no usable candidate answer yet, otherwise {{"said": "what they actually said, at most 25 words", "demonstrates": "the claim, decision, experience or competency it shows", "evidence": ["at most 2 concrete things in the answer that support that"], "unknown": ["at most 2 important things still unknown"], "sufficient": true|false, "competency": "a key from the ASSESSMENT RECORD", "status": "partial|established|concern", "contradiction": "only if the answer conflicts with an earlier answer, the CV or a document: say exactly how, otherwise empty"}}}}
 The "text" is the only thing the candidate hears. It must not contain any of your assessment."""
@@ -478,12 +484,21 @@ The "text" is the only thing the candidate hears. It must not contain any of you
     if note:   # one corrective regeneration, only when the question and the assessment disagree or the question repeats; a failure keeps the first reply
         try: d2 = ask_turn(prompt + "\n" + note, effort); d, upd = d2, (None if (unclear or not last_c) else clean_update(d2.get("assessment"), keys))
         except ai.AIError: pass
+    # --- the model may ask to end the interview; the code decides whether that is allowed ---
+    warns = int((sess.assessment or {}).get("conduct_warnings", 0)); reason = str(d.get("end_reason") or "").strip().lower(); reason = reason if reason in ("finished", "unprofessional") else ""
+    wants_end = bool(last_c) and not submitted and not unclear and len(last_txt.split()) < 30 and bool(_WANTS_END.search(last_txt))
+    if reason == "unprofessional" and not (last_c and not unclear and (warns >= 1 or d.get("severe") is True)): reason = ""; d["warn"] = True   # a first offence is a warning, never an ending
+    if reason == "finished" and not (last_c and (wants_end or (agenda_done and elapsed >= 0.8 * ws.duration * 60))): reason = ""   # "finished" only when the candidate says so, or the plan and the time are used up
+    if closing and not reason: reason = "finished"
+    if d.get("warn") and not reason and last_c and not unclear:
+        a = dict(sess.assessment or {}); a["conduct_warnings"] = warns + 1; sess.assessment = a; sess.save(update_fields=["assessment"])
+    ending = bool(reason) and bool(turns)
     # --- enforce the plan in code: the model proposes, the plan decides who speaks ---
     move = d.get("move") if d.get("move") in ("followup", "advance") else ("advance" if must_advance else "followup")
     if must_advance and not closing: move = "advance"
     interject = bool(d.get("interject")) and bool(pairs) and len(panel) > 1
     owner_cur = ids.get(cur["owner"]) if cur else None
-    if closing: sp = panel[0]   # the lead closes the meeting for everyone
+    if ending: sp = panel[0]   # the lead closes the meeting for everyone
     elif unclear: sp = ids.get(d.get("speaker_id")) or (ids.get(asked[-1].speaker_id) if asked and asked[-1].speaker_id in ids else None) or panel[0]
     elif interject: sp = ids.get(d.get("speaker_id")) or owner_cur or panel[0]
     elif move == "advance" and nxt: sp = ids.get(nxt["owner"]) or panel[0]
@@ -500,12 +515,15 @@ The "text" is the only thing the candidate hears. It must not contain any of you
     if cur is not None and cur.get("done"):
         a = dict(sess.assessment or {}); a["objectives_done"] = (a.get("objectives_done", []) + [cur["area"]])[-20:]; sess.assessment = a; sess.save(update_fields=["assessment"])
     d["text"] = polish(re.sub(r"^\s*" + re.escape(sp.name) + r"\s*[,:\-]\s*", "", str(d.get("text", "")), flags=re.I))  # a speaker never opens by saying their own name
-    end = closing and bool(turns)   # only the clock ends the interview: the model's own "end" is ignored, so a question is never the last thing said
-    if end: d["text"] = close_text(d["text"], lang)
+    end = ending   # only the clock, or an end the rules above allowed, closes the meeting; the closing words never contain a question
+    if end:
+        d["text"] = close_text(d["text"], lang, reason)
+        a = dict(sess.assessment or {}); a["ended_by"] = reason; sess.assessment = a; sess.save(update_fields=["assessment"])
     area = (cur or {}).get("area", "") if (move == "followup" or interject or not nxt) else nxt["area"]
     t = Turn.objects.create(session=sess, speaker=sp, role="interviewer", text=d.get("text", "")[:900], topic=str(area or d.get("topic", ""))[:120], followup=(move == "followup" and not unclear), offset=int(elapsed))
     if t.topic and t.topic not in sess.covered: sess.covered = (sess.covered + [t.topic])[-20:]; sess.save(update_fields=["covered"])
     quoted = " ".join(str(d.get("heard") or "").lower().split()).strip(" .,\"'")
+    t.end_reason = reason if end else ""
     t.grounded = None if (not last_c or unclear or not quoted) else (quoted in " ".join(last_txt.lower().split()))  # did the interviewer quote words the candidate really said?
     return t, end, False
 
@@ -545,6 +563,10 @@ def final_score(model_overall, cat_scores, weights, answered, asked_n, wrong, im
     base -= min(20, 5 * wrong + 3 * implausible)
     return int(max(0, min(100, round(base))))
 
+def ended_note(sess):
+    if (sess.assessment or {}).get("ended_by") == "unprofessional": return "HOW IT ENDED: the panel ENDED THE INTERVIEW EARLY because of the candidate's unprofessional conduct. A real panel counts that heavily against the candidate (communication, behavioural, professionalism). Areas never reached stay insufficient_evidence; do not invent evidence for them.\n"
+    return ""
+
 def evaluate(sess):
     turns = list(sess.turns.order_by("id")); ws = sess.workspace
     tr = "\n".join(f"[turn {t.id} @ {t.offset//60:02d}:{t.offset%60:02d}] {(t.speaker.name if t.speaker else 'CANDIDATE')}: {t.text}" for t in turns)
@@ -553,7 +575,7 @@ def evaluate(sess):
     prompt = f"""Evaluate this REAL interview the way the hiring panel would after the candidate has left, and give a score. Be strict, honest and specific, as an examiner is, not as a coach trying to encourage. Only score a category if the transcript gives evidence; otherwise null.
 {ctx(ws)}
 TRANSCRIPT:\n{tr[:14000]}
-FACTS THE CANDIDATE STATED THAT AN ONLINE CHECK FOUND WRONG OR IMPLAUSIBLE: \n{fc}
+{ended_note(sess)}FACTS THE CANDIDATE STATED THAT AN ONLINE CHECK FOUND WRONG OR IMPLAUSIBLE: \n{fc}
 THE PANEL'S ROLE-SPECIFIC RUBRIC AND ITS NOTES DURING THE INTERVIEW (a starting point, not a verdict: re-judge every competency from the transcript itself):
 {assessment_text(sess)}
 ROLE LENS: {role_lens(ws)}

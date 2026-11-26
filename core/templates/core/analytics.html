@@ -1,0 +1,23 @@
+{% extends 'core/app_base.html' %}{% load static %}{% block title %}Analytics: ReadyWise{% endblock %}
+{% block content %}
+<div class="pg-head"><div><h1>Analytics</h1><p>How you are improving, skill by skill. Your score trend and today's tasks stay on the dashboard.</p></div><a class="btn" href="{% url 'dashboard' %}"><i data-lucide="layout-dashboard" width="15"></i>Dashboard</a></div>
+<div class="strip"><div><small>Score since first interview</small><b>{% if progress.trend.state == 'up' or progress.trend.state == 'down' or progress.trend.state == 'flat' %}{{ progress.trend.delta|stringformat:"+d" }}{% elif progress.trend.last is not None %}{{ progress.trend.last }}{% else %}-{% endif %}</b></div><div><small>Average skill score</small><b>{% if avg is None %}–{% else %}{{ avg }}{% endif %}</b></div><div><small>Tasks done this week</small><b>{{ progress.week_done }}</b></div><div><small>Plan completed so far</small><b>{% if progress.completion is not None %}{{ progress.completion }}%{% else %}-{% endif %}</b></div></div>
+<div class="pg-row">
+  <section class="glass pg-card"><header><div><h3>Skills: first vs latest</h3><p>How each skill has moved since you were first assessed.</p></div></header>
+    {% if progress.cats %}<div class="chart-box tall"><canvas id="pg-skills" role="img" aria-label="Skill scores, first against latest"></canvas></div><div class="deltas">{% for c in progress.cats %}<span class="dl {% if c.delta >= 3 %}up{% elif c.delta <= -3 %}down{% else %}flat{% endif %}">{{ c.label }} <b>{{ c.delta|stringformat:"+d" }}</b></span>{% endfor %}</div>{% else %}<div class="pg-empty"><div><b>No skill scores yet</b>They appear after your first evaluated interview.</div></div>{% endif %}</section>
+  <section class="glass pg-card"><header><div><h3>Skills memory</h3><p>Updated after each evaluated interview. Empty means not assessed yet.</p></div></header><div class="chart-box tall"><canvas id="radar" role="img" aria-label="Skills memory radar"></canvas></div></section>
+</div>
+<section class="glass pg-card" style="margin-top:1rem"><header><div><h3>Prep tasks completed, last 14 days</h3><p>{% if progress.moved %}{{ progress.moved }} missed task{{ progress.moved|pluralize }} {{ progress.moved|pluralize:"was,were" }} moved forward so far. {% endif %}Small, steady days beat long gaps.</p></div></header><div class="chart-box"><canvas id="pg-activity" role="img" aria-label="Tasks completed per day"></canvas></div></section>
+<div class="sec-title"><h2>Evaluated interviews</h2><span>Open one for its full report</span></div>
+<div class="grid gap-2">{% for s in sessions %}<a class="glass dx-row" href="{% url 'report' s.pk %}"><div class="min-w-0"><b class="truncate d-block">{{ s.workspace.title }}</b><small>{{ s.started_at|date:"M d, Y" }}</small></div><span class="dx-score">{% if s.evaluation.overall is not None %}{{ s.evaluation.overall }}{% else %}–{% endif %}</span></a>{% empty %}<p class="text-sm" style="color:var(--mut)">None yet. Finish a practice interview and it is listed here.</p>{% endfor %}</div>
+{{ progress|json_script:"pg-data" }}
+<script>document.addEventListener("DOMContentLoaded",()=>{
+  const P=JSON.parse(document.getElementById("pg-data").textContent),css=getComputedStyle(document.documentElement),v=n=>css.getPropertyValue(n).trim(),b1=v("--b1"),mut=v("--line2"),grid=v("--line"),
+    base={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},animation:{duration:600}},sk=document.getElementById("pg-skills");
+  if(sk&&P.cats.length)new Chart(sk,{type:"bar",data:{labels:P.cats.map(c=>c.label),datasets:[{label:"First",data:P.cats.map(c=>c.first),backgroundColor:mut,borderRadius:3},{label:"Latest",data:P.cats.map(c=>c.latest),backgroundColor:b1,borderRadius:3}]},
+    options:{...base,indexAxis:"y",plugins:{legend:{display:true,position:"bottom",labels:{boxWidth:10,boxHeight:10}}},scales:{x:{min:0,max:100,grid:{color:grid}},y:{grid:{display:false}}}}});
+  new Chart(document.getElementById("pg-activity"),{type:"bar",data:{labels:P.activity.labels,datasets:[{label:"Tasks completed",data:P.activity.values,backgroundColor:b1,borderRadius:3,maxBarThickness:28}]},
+    options:{...base,scales:{y:{beginAtZero:true,ticks:{stepSize:1,precision:0},grid:{color:grid}},x:{grid:{display:false},ticks:{maxTicksLimit:7}}}}});
+  new Chart(document.getElementById("radar"),{type:"radar",data:{labels:{{ labels|safe }},datasets:[{data:{{ mem_json|safe }},backgroundColor:b1+"22",borderColor:b1,borderWidth:2,pointBackgroundColor:b1,pointRadius:3}]},
+    options:{...base,scales:{r:{min:0,max:100,ticks:{display:false},grid:{color:grid},angleLines:{color:grid}}}}});
+});</script>{% endblock %}

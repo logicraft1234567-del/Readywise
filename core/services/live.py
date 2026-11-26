@@ -2,9 +2,11 @@
 1. builds the interviewer's instructions from the same interview context the standard engine uses (candidate, role, research, agenda, persona), and
 2. mints a short-lived, single-purpose token that is locked to that configuration, so the real API key and the instructions never reach the browser.
 The audio itself travels browser <-> Google. Transcripts come back through room_live_turns and are saved as ordinary Turn rows."""
-import datetime, hashlib, random
+import datetime, hashlib, itertools
 from django.conf import settings
 from . import agents
+
+_turn = itertools.count()   # hands each new interview the next key, so several live interviews at once spread over all the keys
 
 FEMALE = ["Kore", "Aoede", "Leda"]
 MALE = ["Puck", "Charon", "Fenrir"]
@@ -43,23 +45,32 @@ HOW TO SPEAK ON THE CALL:
 - During the call you will receive short written messages from the system: a PRIVATE NOTE with a verified fact, an instruction to hand the candidate a hands-on task, or the candidate's submitted solution to review. Follow them exactly, in your own natural words, and never mention that you were given a note.
 - While the candidate works on a hands-on task, stay quiet. They may think aloud: do not comment on every sentence. Speak only if they ask you something or say they are stuck, and never coach them towards the answer.
 - The interview lasts {ws.duration} minutes and you decide nothing about its length. Until the system tells you that time is nearly up, NEVER wrap up, never say goodbye and never thank the candidate for their time; if you run out of planned areas, go deeper on the weakest evidence.
+- You can end the interview yourself with the end_interview tool, in two cases only. reason="finished": the candidate clearly says they are done or want to stop, or every area is covered and the time is nearly used. reason="unprofessional": the candidate is abusive, insulting, harassing, sexual, threatening or discriminatory, or keeps refusing to take the interview seriously. The first time, do not end it: say calmly that this is a professional interview and you need it to stay that way, and carry on. End it only if it continues after that warning (pass warned_before=true), or at once for threats, slurs, sexual harassment or hate (pass severe=true). Never end for nerves, silence, "I don't know", weak answers or criticism of the process. To end: FIRST say your closing words out loud (thanks, what happens next, goodbye; for unprofessional conduct, a calm, firm, polite statement that you are ending the interview because it has not stayed professional), with no question, THEN call end_interview.
 - When told that time is nearly up, wrap up the way the real interview would end: a closing remark, thank the candidate and say what happens next in the process. Ask no new question, not even 'do you have any questions', and say goodbye: the meeting ends when you stop speaking."""
 
 def mint(sess):
     """Returns what the browser needs to open one Live session. Raises on any failure; the caller falls back to the standard interview."""
     from google import genai
     ws = sess.workspace; iv = lead_of(sess); voice = voice_for(iv)
-    key = random.choice(settings.LIVE_GEMINI_KEYS)
-    client = genai.Client(api_key=key, http_options={"api_version": "v1alpha"})
+    keys = list(settings.LIVE_GEMINI_KEYS); first = next(_turn) % len(keys); keys = keys[first:] + keys[:first]
     now = datetime.datetime.now(tz=datetime.timezone.utc)
     cfg = {"response_modalities": ["AUDIO"], "system_instruction": instruction(sess),
            "speech_config": {"voice_config": {"prebuilt_voice_config": {"voice_name": voice}}},
            "input_audio_transcription": {}, "output_audio_transcription": {},   # transcripts are for the interview record; the model itself hears the audio
-           "session_resumption": {}, "context_window_compression": {"sliding_window": {}}}
-    tok = client.auth_tokens.create(config={
-        "uses": 4,   # the first connection plus a few reconnects
-        "expire_time": now + datetime.timedelta(minutes=30), "new_session_expire_time": now + datetime.timedelta(minutes=2),
-        "live_connect_constraints": {"model": settings.LIVE_MODEL, "config": cfg}, "http_options": {"api_version": "v1alpha"}})
+           "session_resumption": {}, "context_window_compression": {"sliding_window": {}},
+           "tools": [{"function_declarations": [{"name": "end_interview", "description": "Ends the interview after your spoken closing words. Only for the two cases in your instructions.",
+                                                 "parameters": {"type": "OBJECT", "properties": {"reason": {"type": "STRING", "enum": ["finished", "unprofessional"]}, "severe": {"type": "BOOLEAN"}, "warned_before": {"type": "BOOLEAN"}}, "required": ["reason"]}}]}]}
+    tok = None; err = None
+    for key in keys:   # if one key is out of quota or rejected, the next one is tried before falling back to the standard interview
+        try:
+            client = genai.Client(api_key=key, http_options={"api_version": "v1alpha"})
+            tok = client.auth_tokens.create(config={
+                "uses": 4,   # the first connection plus a few reconnects
+                "expire_time": now + datetime.timedelta(minutes=30), "new_session_expire_time": now + datetime.timedelta(minutes=2),
+                "live_connect_constraints": {"model": settings.LIVE_MODEL, "config": cfg}, "http_options": {"api_version": "v1alpha"}})
+            break
+        except Exception as e: err = e
+    if tok is None: raise err
     lead = {"id": iv.id, "name": iv.name, "position": iv.position, "image": f"/static/{iv.image}"}
     return {"token": tok.name, "model": settings.LIVE_MODEL, "lead": lead, "voice": voice, "limit_s": int(ws.duration) * 60,
             "opening": "Begin the interview now."}

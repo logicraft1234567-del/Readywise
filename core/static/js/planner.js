@@ -104,6 +104,7 @@
     last = d;
     const bd = $("#bell-badge"); if (bd) { bd.textContent = d.count; bd.hidden = !d.count; }
     const side = $("#side-n"); if (side) { side.textContent = d.count; side.hidden = !d.count; }
+    const tab = $("#tab-n"); if (tab) { tab.textContent = d.count; tab.hidden = !d.count; }
     const list = $("#np-list"); if (list) list.innerHTML = d.items.length ? d.items.map(noteHTML).join("") : `<div class="np-empty">Nothing to do right now. Your plan is clear.</div>`;
     const f = $("#focus-list");
     if (f) { const t = d.items.filter(i => i.task); f.innerHTML = t.length ? t.slice(0, 6).map(i => taskHTML(i.task, { compact: true, showWs: true, msg: i.message })).join("") : `<p class="text-sm" style="color:var(--mut)">All clear. Start a practice interview to keep your skills sharp.</p>`; }

@@ -74,10 +74,15 @@ def login_view(request):
 def logout_view(request): logout(request); return redirect("landing")
 
 # ---------- app ----------
+def _upcoming(rows):
+    """The interview to put first: the nearest one that still has a date ahead, otherwise the most recent one."""
+    dated = [r for r in rows if r["left"] is not None and r["left"] >= 0]
+    return min(dated, key=lambda r: r["left"]) if dated else (rows[0] if rows else None)
+
 @login_required
 def dashboard(request):
+    """Only what matters today: the interview coming up, today's tasks, the score trend and the interviews in progress. The deeper analysis is on the Analytics page."""
     logic.ensure_seed(); p = agents.profile_of(request.user); today = date.today()
-    mem = {m.category: round(m.score) for m in MemoryItem.objects.filter(user=request.user)}
     rows = []
     for w in Workspace.objects.filter(user=request.user).order_by("-created"):
         t = w.tasks.count(); d = w.tasks.filter(done=True).count(); sess = w.sessions.filter(status="done").count()
@@ -86,12 +91,42 @@ def dashboard(request):
         rows.append({"w": w, "pct": round(100 * d / t) if t else 0, "tasks": t, "done": d, "sessions": sess, "steps": steps, "next": nxt,
                      "left": (w.date - today).days if w.date and not w.general else None, "panel": list(w.panel.all()), "diff": w.get_difficulty_display(), "kind_icon": kinds.profile(w.kind)["icon"]})
     hour = timezone.localtime().hour; hello = "Good morning" if hour < 12 else "Good afternoon" if hour < 18 else "Good evening"
-    scored = [v for v in mem.values()]; progress = planner.progress(request.user)
-    due = PrepTask.objects.filter(workspace__user=request.user, done=False, due__lte=today).select_related("workspace")
-    return render(request, "core/dashboard.html", {"rows": rows, "profile": p, "hello": hello, "display_name": (p.full_name.split()[0] if p.full_name else request.user.username), "cards": KIND_CARDS,
-        "progress": progress, "stats": {"active": len(rows), "due": due.count(), "sessions": Session.objects.filter(workspace__user=request.user, status="done").count(), "avg": round(sum(scored) / len(scored)) if scored else None},
-        "mem": [(l, mem.get(c)) for c, l in CATS], "mem_json": json.dumps([mem.get(c, 0) for c, _ in CATS]), "labels": json.dumps([l for _, l in CATS]),
-        "sessions": Session.objects.filter(workspace__user=request.user, status="done").select_related("workspace").order_by("-started_at")[:5], "due": due[:6], "ivs": Interviewer.objects.filter(owner=None)[:5]})
+    progress = planner.progress(request.user); focus = _upcoming(rows)
+    due = PrepTask.objects.filter(workspace__user=request.user, done=False, due__lte=today).count()
+    done_sessions = Session.objects.filter(workspace__user=request.user, status="done").count()
+    graph = {"series": progress["series"]}   # only the score line is drawn here
+    return render(request, "core/dashboard.html", {"rows": rows, "others": [r for r in rows if r is not focus], "focus": focus, "profile": p, "hello": hello,
+        "display_name": (p.full_name.split()[0] if p.full_name else request.user.username), "progress": progress, "graph": graph,
+        "stats": {"due": due, "sessions": done_sessions}})
+
+@login_required
+def analytics(request):
+    """The full analysis: skills first against latest, the skills memory, daily activity, plan completion and every evaluated session."""
+    logic.ensure_seed(); mem = {m.category: round(m.score) for m in MemoryItem.objects.filter(user=request.user)}
+    progress = planner.progress(request.user); scored = list(mem.values())
+    sessions = Session.objects.filter(workspace__user=request.user, status="done").select_related("workspace", "evaluation").order_by("-started_at")[:12]
+    return render(request, "core/analytics.html", {"progress": progress, "mem_json": json.dumps([mem.get(c, 0) for c, _ in CATS]), "labels": json.dumps([l for _, l in CATS]),
+        "mem": [(l, mem.get(c)) for c, l in CATS], "sessions": sessions, "avg": round(sum(scored) / len(scored)) if scored else None})
+
+@login_required
+def search(request):
+    """Header search: the person's own interviews, prep tasks, reports and interviewers. With nothing typed it offers recent interviews and today's tasks."""
+    from django.db.models import Q
+    q = request.GET.get("q", "").strip()[:80]; u = request.user; today = date.today(); groups = []
+    def add(label, items):
+        if items: groups.append({"label": label, "items": items})
+    def ws_item(w): return {"icon": "folder", "title": w.title, "sub": " ".join(x for x in (w.company, w.position) if x) or w.get_kind_display(), "url": f"/w/{w.pk}/"}
+    def task_item(t): return {"icon": "circle-check" if t.done else "circle", "title": t.title, "sub": f"{t.workspace.title}, {'done' if t.done else 'due ' + t.due.strftime('%b %d')}", "url": f"/calendar/?m={t.due:%Y-%m}&w={t.workspace_id}&d={t.due.isoformat()}"}
+    if not q:
+        add("Recent interviews", [ws_item(w) for w in Workspace.objects.filter(user=u).order_by("-created")[:4]])
+        add("Due today", [task_item(t) for t in PrepTask.objects.filter(workspace__user=u, done=False, due__lte=today).select_related("workspace")[:4]])
+        return JsonResponse({"q": q, "groups": groups})
+    add("Interviews", [ws_item(w) for w in Workspace.objects.filter(user=u).filter(Q(title__icontains=q) | Q(company__icontains=q) | Q(position__icontains=q)).order_by("-created")[:5]])
+    add("Prep tasks", [task_item(t) for t in PrepTask.objects.filter(workspace__user=u).filter(Q(title__icontains=q) | Q(detail__icontains=q)).select_related("workspace").order_by("done", "due")[:6]])
+    sess = Session.objects.filter(workspace__user=u, status="done").filter(Q(workspace__title__icontains=q) | Q(workspace__company__icontains=q) | Q(evaluation__summary__icontains=q)).select_related("workspace", "evaluation").order_by("-started_at").distinct()[:4]
+    add("Reports", [{"icon": "file-text", "title": s.workspace.title, "sub": f"{timezone.localtime(s.started_at):%b %d, %Y}" + (f", score {s.evaluation.overall}" if getattr(getattr(s, "evaluation", None), "overall", None) is not None else ""), "url": f"/report/{s.pk}/"} for s in sess])
+    add("Interviewers", [{"icon": "user-round", "title": i.name, "sub": i.position, "url": "/interviewers/"} for i in Interviewer.objects.filter(Q(owner=None) | Q(owner=u)).filter(Q(name__icontains=q) | Q(position__icontains=q) | Q(expertise__icontains=q))[:4]])
+    return JsonResponse({"q": q, "groups": groups})
 
 def _save_profile(request, p):
     """Save profile answers from either the full profile page or the guided welcome flow. Only fields that were sent are changed."""
@@ -431,7 +466,7 @@ def room_turn(request, pk):
     if end:   # the interview is over: the evaluation starts now, while the closing words are still being spoken, so the report is ready almost at once
         try: jobs.prefetch_evaluation(s.pk)
         except Exception: pass
-    return JsonResponse({"speaker": _iv(t.speaker), "text": t.text, "end": end, "intro": intro, "limit": LIMITS.get(s.mode, 0), "turn_id": t.id, "grounded": getattr(t, "grounded", None), "challenge": getattr(t, "challenge", None), "n": s.turns.filter(role="interviewer").count()})
+    return JsonResponse({"speaker": _iv(t.speaker), "text": t.text, "end": end, "reason": getattr(t, "end_reason", ""), "intro": intro, "limit": LIMITS.get(s.mode, 0), "turn_id": t.id, "grounded": getattr(t, "grounded", None), "challenge": getattr(t, "challenge", None), "n": s.turns.filter(role="interviewer").count()})
 
 @login_required
 @require_POST
@@ -455,6 +490,8 @@ def room_finish(request, pk):
     except ValueError: d = {}
     frames = [f for f in (d.get("frames") or [])[:5] if isinstance(f, str) and len(f) < 400000]
     if not s.ended_at: s.ended_at = timezone.now()
+    if d.get("reason") in ("finished", "unprofessional") and not (s.assessment or {}).get("ended_by"):   # the live interviewer ended it itself
+        a = dict(s.assessment or {}); a["ended_by"] = d["reason"]; s.assessment = a
     s.status = "evaluating"; s.save()
     cam = d.get("camera") if isinstance(d.get("camera"), dict) else None
     if cam:  # only plain numbers from the browser are kept

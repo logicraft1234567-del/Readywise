@@ -71,7 +71,7 @@ const Live = (() => {
   }
   function endTurn() {
     if (!cur) return; const role = cur.role, t = cur.text.replace(/\s+/g, " ").trim(); if (t) pending.push({ role, text: t }); cur = null; flush();
-    if (t && role === "candidate") factUntil = Date.now() + 45000;   // a verified correction may arrive in the next few seconds
+    if (t && role === "candidate") { lastCand = t; factUntil = Date.now() + 45000; }   // a verified correction may arrive in the next few seconds
     if (t && role === "interviewer") { ivCount++; maybeTask(); }
   }
   async function flush() {
@@ -81,7 +81,19 @@ const Live = (() => {
   }
 
   /* ---------- messages from Gemini ---------- */
+  let lastCand = "", endReason = "", endGuard = 0;
+  function onTool(calls) {   // the interviewer asked to end the interview: allowed only under the same rules the standard interview uses
+    for (const fc of calls) {
+      if (fc.name !== "end_interview") { send({ toolResponse: { functionResponses: [{ id: fc.id, name: fc.name, response: { result: "unknown tool" } }] } }); continue; }
+      const a = fc.args || {}, el = (Date.now() - t0) / 1000, wants = /\b(i'?m|i am|we'?re|we are) (done|finished)|\b(let'?s|can we|could we) (stop|end|finish)|\bi (want|need|would like) to (stop|end|leave)|end (the|this) (interview|call|meeting)/i.test(lastCand);
+      let ok = a.reason === "finished" ? (wants || el >= meta.limit_s * .8) : a.reason === "unprofessional" ? (a.severe === true || a.warned_before === true) : false;
+      if (!ok) { send({ toolResponse: { functionResponses: [{ id: fc.id, name: fc.name, response: { result: "refused", note: a.reason === "unprofessional" ? "Give the candidate one calm professional warning first, then continue the interview." : "The interview is not finished. Continue with your next question." } }] } }); continue; }
+      send({ toolResponse: { functionResponses: [{ id: fc.id, name: fc.name, response: { result: "ok" } }] } });
+      endReason = a.reason; closing = true; clearTimeout(endGuard); endGuard = setTimeout(() => finish(false, endReason), 15000);   // normally the end follows the spoken goodbye; this only covers a missing turnComplete
+    }
+  }
   function onMsg(m) {
+    if (m.toolCall && m.toolCall.functionCalls) onTool(m.toolCall.functionCalls);
     if (m.sessionResumptionUpdate && m.sessionResumptionUpdate.newHandle) handle = m.sessionResumptionUpdate.newHandle;
     if (m.goAway) reconnect();
     const c = m.serverContent; if (!c) return;
@@ -89,7 +101,7 @@ const Live = (() => {
     if (c.modelTurn && c.modelTurn.parts) c.modelTurn.parts.forEach(p => { if (p.inlineData && p.inlineData.data && !stopping) play(p.inlineData.data); });
     if (c.inputTranscription && c.inputTranscription.text) frag("candidate", c.inputTranscription.text);
     if (c.outputTranscription && c.outputTranscription.text) frag("interviewer", c.outputTranscription.text);
-    if (c.turnComplete) { awaiting = false; endTurn(); if (closing) setTimeout(() => { const wait = () => srcs.size ? setTimeout(wait, 300) : finish(); wait(); }, 800); }
+    if (c.turnComplete) { awaiting = false; endTurn(); if (closing) setTimeout(() => { const wait = () => srcs.size ? setTimeout(wait, 300) : finish(false, endReason); wait(); }, 800); }
   }
   async function connect(resume) {
     return new Promise((res, rej) => {

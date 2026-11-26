@@ -156,3 +156,6 @@
 .dash-cols{display:grid;grid-template-columns:minmax(0,1fr);gap:2rem;align-items:start}
 .dash-cols>*{min-width:0}
 @media (min-width:1024px){.dash-cols{grid-template-columns:minmax(0,1fr) minmax(330px,420px)}}
+
+/* the bottom tab bar sits under these on phones */
+@media(max-width:1000px){.pop{bottom:calc(var(--tab-h,64px) + env(safe-area-inset-bottom,0px) + .75rem);right:.75rem;left:.75rem;width:auto}body:has(#ws-foot) .pop{bottom:calc(var(--tab-h,64px) + env(safe-area-inset-bottom,0px) + 9rem)}}
