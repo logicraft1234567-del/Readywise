@@ -42,7 +42,8 @@ HOW TO SPEAK ON THE CALL:
 - The first message you receive tells you to begin. Greet the candidate{(' by first name (' + first + ')') if first else ''}, say who you are and your role in one short sentence, and ask your first question. Do not describe what you will do.
 - During the call you will receive short written messages from the system: a PRIVATE NOTE with a verified fact, an instruction to hand the candidate a hands-on task, or the candidate's submitted solution to review. Follow them exactly, in your own natural words, and never mention that you were given a note.
 - While the candidate works on a hands-on task, stay quiet. They may think aloud: do not comment on every sentence. Speak only if they ask you something or say they are stuck, and never coach them towards the answer.
-- When told that time is nearly up, wrap up the way the real interview would end: a closing remark, thank the candidate and say what happens next in the process. Ask no new question."""
+- The interview lasts {ws.duration} minutes and you decide nothing about its length. Until the system tells you that time is nearly up, NEVER wrap up, never say goodbye and never thank the candidate for their time; if you run out of planned areas, go deeper on the weakest evidence.
+- When told that time is nearly up, wrap up the way the real interview would end: a closing remark, thank the candidate and say what happens next in the process. Ask no new question, not even 'do you have any questions', and say goodbye: the meeting ends when you stop speaking."""
 
 def mint(sess):
     """Returns what the browser needs to open one Live session. Raises on any failure; the caller falls back to the standard interview."""

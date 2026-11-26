@@ -313,7 +313,7 @@ def build_agenda(sess, panel):
 {ctx(ws)}
 PANEL:\n{people}
 RESEARCH TOPICS: {topics}. STAGES: {r.get('stages')}. {_brief(ws, 900)}
-Time: {ws.duration} minutes, about {max(6, ws.duration)} questions. Difficulty: {ws.difficulty}.
+Time: {ws.duration} minutes (the interview runs for the whole time; plan enough areas to fill it, the agenda is extended if it runs out). Difficulty: {ws.difficulty}.
 ROLE LENS (assess this kind of role in this way, not a generic way): {role_lens(ws)}
 First define the RUBRIC: 4 to 7 competencies this opportunity really requires (specific to this role and organisation, not generic), each with what real evidence of it looks like and a weight 1 to 10. Then make the agenda from it.
 Make 5 to 9 agenda items. Each item is ONE area to test, owned by exactly one panel member (match the area to what they cover; spread the items fairly; a solo panel owns them all). Order them like a real interview: opening and motivation first, the core of the role or case in the middle, the hardest challenge of claims and evidence near the end. Include at least one item that checks the candidate's claims against the documents on file or the CV, and one on the weakest point of their profile.
@@ -365,12 +365,25 @@ def unclear_answer(last_txt, prev_q):
 def interject_ok(d, pairs, panel):
     return bool(d.get("interject")) and bool(pairs) and len(panel) > 1
 
+def close_window(ws):
+    """Seconds before the end at which the panel starts closing the meeting (closing words + goodbye). Short interviews get a short window."""
+    return min(75, max(40, int(ws.duration) * 6))
+
+_FAREWELL = {"English": "That brings us to the end of our time. Thank you for speaking with us today. We will review everything and be in touch about the next steps. Goodbye, and take care."}
+
+def close_text(text, lang="English"):
+    """The closing words never ask anything: a question would be left hanging because the meeting ends right after. Question sentences are removed;
+    if nothing is left, a plain closing is used."""
+    parts = re.split(r"(?<=[.!?])\s+", " ".join(str(text or "").split()))
+    kept = " ".join(x for x in parts if x and not x.rstrip().endswith("?")).strip()
+    return kept if len(kept.split()) >= 6 else _FAREWELL.get(lang, _FAREWELL["English"])
+
 def next_turn(sess, elapsed):
     """Returns (turn, interview_over, is_intro). Intro turns need no candidate answer before the next interviewer speaks."""
     ws = sess.workspace; panel = session_panel(sess); turns = list(sess.turns.order_by("id"))
     asked = [t for t in turns if t.role == "interviewer"]; p = profile_of(ws.user); lang = p.language or "English"; first = (p.full_name or "").split(" ")[0]
     remaining = ws.duration * 60 - elapsed
-    closing = remaining < 75 or len(asked) >= max(6, ws.duration)
+    closing = remaining <= close_window(ws)   # the length the candidate chose decides when the interview closes, never the number of questions asked
     people = "\n".join(f"- id={i.id} {i.name}, {i.position}. Personality: {i.personality}. Style: {i.style}. Responsible for: {i.responsibilities}. Difficulty: {i.difficulty}. "
                        f"Question themes (inspiration only, adapt, never read out): {i.question_bank.replace(chr(10), ' | ') or 'none'}. Listens for: {i.rubric or 'n/a'}. "
                        f"Knows about candidate: {memory_for(ws.user, i) or 'nothing yet'}" for i in panel)
@@ -412,10 +425,10 @@ Return JSON only: {{"text": str}}"""
     if cur: cur["tries"] = sum(1 for t in asked if t.topic == cur["area"][:120])   # questions already spent on this area
     must_advance = bool(cur) and (cur.get("tries", 0) >= MAX_TRIES or nonans)
     nxt = next((a for a in agenda if a is not cur and not a.get("done")), None)
-    if closing: phase = "CLOSING: wrap up the way the real interview would end (a closing remark, then thank the candidate and say what happens next in this process), and set end=true. No new question."
+    if closing: phase = "CLOSING: the time is up. Close the meeting the way a real interview ends, in 2 to 4 short sentences: a brief remark on the conversation, thank the candidate (speak for the whole panel if there is more than one of you), say what happens next in this process, and say goodbye. Do NOT ask any question of any kind, not even 'do you have any questions': the meeting ends as soon as you finish speaking. Set end=true."
     elif unclear: phase = "UNCLEAR ANSWER. The last transcript is too thin to be an answer."
     elif must_advance: phase = "MOVE ON: the current area has had its attempts or the candidate said they do not know or do not have it. Treat that as a finding. Take the NEXT agenda item with its owner."
-    else: phase = "MIDDLE: follow the agenda."
+    else: phase = "MIDDLE: follow the agenda. The interview is NOT over: there is still time. Never say goodbye, never thank them for their time and never wrap up. Ask your question and wait for the answer. Set end=false."
     if submitted: heard_rule = ("THE CANDIDATE SUBMITTED THEIR SOLUTION to the hands-on task (" + str(sess.challenge.get("title", "")) + ") . Their work, exactly as submitted, including the result of the automatic checks if any:\n" + last_txt[:3500]
                                 + "\nReview it like a real interviewer: react to something concrete in it and ask ONE question about a trade-off, an edge case or how they would improve it. Copy the few words you are reacting to into the \"heard\" field. Never claim the code does something it does not.")
     elif not last_c: heard_rule = "There is no candidate answer yet."
@@ -470,7 +483,8 @@ The "text" is the only thing the candidate hears. It must not contain any of you
     if must_advance and not closing: move = "advance"
     interject = bool(d.get("interject")) and bool(pairs) and len(panel) > 1
     owner_cur = ids.get(cur["owner"]) if cur else None
-    if closing or unclear: sp = ids.get(d.get("speaker_id")) or (ids.get(asked[-1].speaker_id) if asked and asked[-1].speaker_id in ids else None) or panel[0]
+    if closing: sp = panel[0]   # the lead closes the meeting for everyone
+    elif unclear: sp = ids.get(d.get("speaker_id")) or (ids.get(asked[-1].speaker_id) if asked and asked[-1].speaker_id in ids else None) or panel[0]
     elif interject: sp = ids.get(d.get("speaker_id")) or owner_cur or panel[0]
     elif move == "advance" and nxt: sp = ids.get(nxt["owner"]) or panel[0]
     else: sp = owner_cur or ids.get(d.get("speaker_id")) or panel[len(asked) % len(panel)]
@@ -486,7 +500,8 @@ The "text" is the only thing the candidate hears. It must not contain any of you
     if cur is not None and cur.get("done"):
         a = dict(sess.assessment or {}); a["objectives_done"] = (a.get("objectives_done", []) + [cur["area"]])[-20:]; sess.assessment = a; sess.save(update_fields=["assessment"])
     d["text"] = polish(re.sub(r"^\s*" + re.escape(sp.name) + r"\s*[,:\-]\s*", "", str(d.get("text", "")), flags=re.I))  # a speaker never opens by saying their own name
-    end = bool(d.get("end")) or (closing and bool(turns))
+    end = closing and bool(turns)   # only the clock ends the interview: the model's own "end" is ignored, so a question is never the last thing said
+    if end: d["text"] = close_text(d["text"], lang)
     area = (cur or {}).get("area", "") if (move == "followup" or interject or not nxt) else nxt["area"]
     t = Turn.objects.create(session=sess, speaker=sp, role="interviewer", text=d.get("text", "")[:900], topic=str(area or d.get("topic", ""))[:120], followup=(move == "followup" and not unclear), offset=int(elapsed))
     if t.topic and t.topic not in sess.covered: sess.covered = (sess.covered + [t.topic])[-20:]; sess.save(update_fields=["covered"])

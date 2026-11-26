@@ -418,7 +418,9 @@ def room_stt(request, pk):
 @require_POST
 @ajax
 def room_turn(request, pk):
-    s = mine(Session, request, pk); d = json.loads(request.body); elapsed = int((timezone.now() - s.started_at).total_seconds())
+    s = mine(Session, request, pk); d = json.loads(request.body)
+    if s.status == "open" and not s.turns.exists(): s.started_at = timezone.now(); s.save(update_fields=["started_at"])   # the interview clock starts when the panel first speaks, not while the candidate was still checking the camera
+    elapsed = int((timezone.now() - s.started_at).total_seconds())
     if d.get("answer") is not None:
         tag = {"interrupted": "[interrupting the interviewer] ", "build": agents.BUILD_TAG, "cut_off": "[the panel stopped the candidate because the answer ran long] "}.get(d.get("tag"), "")
         if s.status != "open": return JsonResponse({"error": "This interview has ended."}, status=400)
@@ -542,6 +544,7 @@ def room_live_token(request, pk):
     s = mine(Session, request, pk)
     if s.status != "open": return JsonResponse({"error": "This interview has ended."}, status=400)
     if not live.enabled(): return JsonResponse({"error": "Live voice is not set up on this server."}, status=400)
+    if not s.turns.exists(): s.started_at = timezone.now(); s.save(update_fields=["started_at"])   # same: the clock starts when the interview does
     try: return JsonResponse(live.mint(s))
     except Exception: return JsonResponse({"error": "The live voice could not start."}, status=502)
 

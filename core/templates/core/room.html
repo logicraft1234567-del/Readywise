@@ -53,7 +53,7 @@
     <button class="rm-btn go" id="send" onclick="doneAnswering()" title="Send your answer"><i data-lucide="check" width="18"></i><span>Done</span></button>
     <button class="rm-btn" id="kbbtn" onclick="toggleType()" aria-label="Type instead" title="Type instead"><i data-lucide="keyboard" width="18"></i><span>Type</span></button>
     <button class="rm-btn rm-toggle-log" onclick="document.getElementById('log').classList.add('open')" aria-label="Open transcript" title="Transcript"><i data-lucide="captions" width="18"></i><span>Transcript</span></button>
-    <button class="rm-btn end" onclick="finish()" title="End the interview"><i data-lucide="log-out" width="18"></i><span>End interview</span></button>
+    <button class="rm-btn end" onclick="endByUser()" title="End the interview"><i data-lucide="log-out" width="18"></i><span>End interview</span></button>
   </nav>
   </div>
   <aside class="rm-log" id="log" aria-label="Transcript"><h2>Transcript<button onclick="document.getElementById('log').classList.remove('open')" aria-label="Close transcript"><i data-lucide="x" width="18"></i></button></h2><div class="rm-msgs" id="msgs"></div><div class="rm-live-cap" id="live-text"></div></aside>

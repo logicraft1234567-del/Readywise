@@ -109,11 +109,12 @@ function bars(id, lv) { const t = $("tile" + id); if (!t) return; t.classList.to
 function caption(text, me) { const p = $("cap"); p.textContent = text || ""; p.className = me ? "me" : ""; }
 function logMsg(who, text, cls) { const d = document.createElement("div"); d.className = "rm-msg " + cls; d.innerHTML = "<b></b><div></div>"; d.firstChild.textContent = who; d.lastChild.textContent = text; $("msgs").appendChild(d); $("msgs").scrollTop = 1e9; return d; }
 function setState(t) { $("state").textContent = t; }
-function progress(d) {
-  const T = Math.max(6, DUR), n = d.n || qCount, k = n - PANEL.length;
-  $("qlabel").textContent = BENCH ? "Hands-on task" : d.intro || k < 1 ? "Introductions" : d.end ? "Closing" : `Question ${k} of about ${Math.max(k, T - PANEL.length)}`;
-  const el = (Date.now() - t0) / 1000; $("pbar").style.width = Math.min(100, Math.max(el / (DUR * 60), n / T) * 100) + "%";
+function progress(d) {   // the length of the interview is the clock, not a number of questions
+  const k = (d.n || qCount) - PANEL.length;
+  $("qlabel").textContent = BENCH ? "Hands-on task" : d.intro || k < 1 ? "Introductions" : d.end ? "Closing" : `Question ${k}`;
+  tickBar();
 }
+function tickBar() { if (t0) $("pbar").style.width = Math.min(100, (Date.now() - t0) / (DUR * 60000) * 100) + "%"; }
 
 /* ---------- the interviewer's voice ---------- */
 function voiceFor(p) { const v = speechSynthesis.getVoices().filter(x => x.lang.startsWith("en")), f = v.filter(x => /female|samantha|zira|susan|aria|jenny/i.test(x.name)), m = v.filter(x => !f.includes(x)), pool = p.gender === "f" ? f : m; return (pool.length ? pool : v)[p.id % Math.max(1, pool.length || v.length)]; }
@@ -150,10 +151,10 @@ function stopSpeech() { token++; try { speechSynthesis.cancel(); } catch (e) { }
 async function next(answer, tag) {
   phase = "thinking"; setState("The panel is thinking…"); setSpeaker(null); $("send").disabled = true; $("pip").classList.remove("talking"); $("mestate").textContent = "Ready";
   try {
-    const d = await post(`/room/${SID}/turn/`, { answer, tag }); retryNext = false; current = d; lastSpeaker = d.speaker; qCount = d.n; progress(d);
+    const d = await post(`/room/${SID}/turn/`, { answer, tag }); if (ending) return; retryNext = false; current = d; lastSpeaker = d.speaker; qCount = d.n; progress(d);
     logMsg(d.speaker.name + ", " + d.speaker.position, d.text, "i"); caption(d.text); setSpeaker(d.speaker.id); setState(d.speaker.name + " is speaking" + (ALLOW_INT && cap ? " (start talking to interrupt)" : ""));
     if (d.challenge) openBench(d.challenge);
-    playVoice(d.speaker, { turn_id: d.turn_id }, d.text, () => { setSpeaker(null); if (d.end) { finish(); return; } if (d.intro) { next(null); return; } startAnswer(); });
+    playVoice(d.speaker, { turn_id: d.turn_id }, d.text, () => { setSpeaker(null); if (d.end) { setState("The panel is closing the meeting…"); setTimeout(() => finish(false), 900); return; } if (d.intro) { next(null); return; } startAnswer(); });
   } catch (e) { toast(e.message, true); phase = "error"; retryNext = true; $("send").disabled = false; setState("Something failed. Press Done answering to retry."); }
 }
 function startAnswer(fromBarge) {
@@ -164,7 +165,7 @@ function startAnswer(fromBarge) {
   if (LIMIT && !BENCH) { let left = LIMIT; $("limitbox").textContent = left + "s"; clearInterval(answerTimer); answerTimer = setInterval(() => { left--; $("limitbox").textContent = left + "s"; if (left <= 0) { clearInterval(answerTimer); doneAnswering(); } }, 1000); }
 }
 function bargeIn(manual) {
-  if (phase !== "speaking") return; const who = lastSpeaker; stopSpeech(); interrupted = true;
+  if (phase !== "speaking" || (current && current.end)) return;   // the closing words are never interrupted const who = lastSpeaker; stopSpeech(); interrupted = true;
   startAnswer(!manual); setState("You have the floor."); if (manual && !cap) toast("Type your answer, then press Send.");
 }
 async function doneAnswering() {
@@ -271,17 +272,43 @@ async function begin() {
   if (wantRec && window.MediaRecorder) { rec = new MediaRecorder(stream); rec.ondataavailable = e => e.data.size && chunks.push(e.data); rec.start(1000); }
   if ($("vconsent").checked && stream && stream.getVideoTracks().length) { const cv = document.createElement("canvas"), snap = () => { const v = $("me"); if (camOff || FRAMES.length >= 5 || !v.videoWidth) return; cv.width = 320; cv.height = Math.round(320 * v.videoHeight / v.videoWidth); cv.getContext("2d").drawImage(v, 0, 0, cv.width, cv.height); FRAMES.push(cv.toDataURL("image/jpeg", .6).split(",")[1]); }; setTimeout(snap, 8000); setInterval(snap, 40000); }
   if (cap) cap.close();  // the setup test window is done
-  rwCountdown({ title: "Interview starting", sub: "Your panel is joining the room. Take a breath.", onDone: () => { t0 = Date.now(); clockT = setInterval(() => { const s = Math.floor((Date.now() - t0) / 1000); $("clock").textContent = String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); }, 1000); speechSynthesis.getVoices(); Live.tryStart().then(ok => { if (!ok) next(null); }); } });
+  rwCountdown({ title: "Interview starting", sub: "Your panel is joining the room. Take a breath.", onDone: () => { t0 = Date.now(); clockT = setInterval(() => { const s = Math.floor((Date.now() - t0) / 1000); $("clock").textContent = String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); tickBar(); }, 1000); speechSynthesis.getVoices(); Live.tryStart().then(ok => { if (!ok) next(null); }); } });
 }
-async function finish() {
-  if (ending) return; ending = true; phase = "idle"; Vis.stop(); if (typeof Live !== "undefined" && Live.active) await Live.stop(); stopSpeech(); clearInterval(answerTimer); clearInterval(clockT); setState("Evaluating your interview…");
+/* ---------- closing the meeting: everyone leaves, then the AI works while an animation plays until the report is ready ---------- */
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const END_MSGS = ["Reading back through your answers…", "Checking the facts you stated…", "Scoring each area…", "Writing your feedback…", "Almost ready…"];
+let endT = null;
+async function leaveRoom() {   // the interviewers leave one by one, like people leaving a video call
+  const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  for (const p of PANEL) {
+    const t = $("tile" + p.id); if (!t) continue; t.classList.remove("on", "talking"); t.classList.add("left");
+    const st = t.querySelector(".rm-state"); if (st) st.textContent = "Left the meeting"; caption(p.name + " left the meeting"); await sleep(calm ? 250 : 850);
+  }
+  await sleep(calm ? 150 : 600);
+}
+function showEnding() {
+  if ($("rm-end")) return; const o = document.createElement("div"); o.id = "rm-end"; o.setAttribute("role", "status"); o.setAttribute("aria-live", "polite");
+  o.innerHTML = '<div class="orb"><span class="ring"></span><span class="ring r2"></span><span class="core"></span></div><b>The interview has ended</b><p id="rm-end-tx"></p><div class="dots"><i></i><i></i><i></i></div>';
+  document.body.appendChild(o); requestAnimationFrame(() => o.classList.add("on"));
+  let i = 0; const tx = $("rm-end-tx"); tx.textContent = "The panel is preparing your report…";
+  clearInterval(endT); endT = setInterval(() => { tx.textContent = END_MSGS[i % END_MSGS.length]; i++; }, 2600);
+}
+function hideEnding() { clearInterval(endT); const o = $("rm-end"); if (o) { o.classList.remove("on"); setTimeout(() => o.remove(), 500); } }
+function endByUser() { finish(true); }   // End interview: the panel leaves, then the animation plays until the report is ready
+async function finish(byUser) {
+  if (ending) return; ending = true; phase = "idle"; Vis.stop(); clearInterval(answerTimer); clearInterval(benchT); stopSpeech(); setSpeaker(null); $("limitbox").textContent = ""; $("live").classList.remove("build");
+  document.querySelectorAll(".rm-ctl .rm-btn").forEach(b => b.disabled = true); $("typebox").classList.remove("show");
+  setState(byUser ? "You ended the interview." : "The interview has ended.");
+  const liveStop = (typeof Live !== "undefined" && Live.active) ? Live.stop() : Promise.resolve();   // saves the last words while the panel leaves
+  await leaveRoom(); showEnding(); const shown = sleep(4000); await liveStop; clearInterval(clockT);
   if (cap) { try { await cap.close(); } catch (e) { } cap.destroy(); }
   const stop = new Promise(r => { if (rec && rec.state !== "inactive") { rec.onstop = r; rec.stop(); } else r(); }); await stop;
-  let upload = Promise.resolve();   // the recording uploads while the evaluation runs; the report opens as soon as both are done (the upload is waited for at most 6 s more)
+  let upload = Promise.resolve();   // the recording uploads while the evaluation runs; the report opens as soon as both are done (the upload is waited for at most 3 s more)
   if (chunks.length) { const f = new FormData(); f.append("rec", new Blob(chunks, { type: "video/webm" }), "session.webm"); upload = post(`/room/${SID}/recording/`, f, true).catch(() => { }); }
   if (stream) stream.getTracks().forEach(t => t.stop());
   try {
     const d = await post(`/room/${SID}/finish/`, { frames: FRAMES, camera: Vis.summary() });
-    if (d.job) await pollJob(d.job, () => { }, 350); await Promise.race([upload, new Promise(r => setTimeout(r, 3000))]); location.href = d.url;
-  } catch (e) { toast(e.message, true); ending = false; }
+    if (d.job) await pollJob(d.job, () => { }, 350); await Promise.race([upload, new Promise(r => setTimeout(r, 3000))]);
+    await shown; $("rm-end").classList.add("done"); await sleep(700); location.href = d.url;   // the animation always plays to its end before the report opens
+  } catch (e) { toast(e.message, true); hideEnding(); ending = false; document.querySelectorAll(".rm-ctl .rm-btn").forEach(b => b.disabled = false); }
 }
