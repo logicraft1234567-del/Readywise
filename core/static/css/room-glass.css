@@ -1,0 +1,142 @@
+/* ReadyWise interview room: glass layer.
+   Loaded AFTER room.css. Every surface in the room (top bar, tiles' labels, captions, controls, transcript, typing box,
+   hands-on task panels, lobby cards and every button) is frosted glass over one vivid backdrop, in light and dark mode.
+   Glass only reads as glass when there is colour behind it, so the room paints one backdrop and every layer blurs it. */
+
+.rm{
+  --gl-blur:22px; --gl-sat:170%;
+  --gl-fill:color-mix(in srgb,var(--surface) 38%,transparent);          /* panels */
+  --gl-fill-2:color-mix(in srgb,var(--surface) 58%,transparent);        /* small pills over photos: more opaque so text stays readable */
+  --gl-fill-3:color-mix(in srgb,var(--surface) 74%,transparent);        /* code editor, text areas: legibility first */
+  --gl-edge:color-mix(in srgb,#fff 42%,transparent);
+  --gl-edge-soft:color-mix(in srgb,#fff 22%,transparent);
+  --gl-shine:linear-gradient(135deg,rgba(255,255,255,.34),rgba(255,255,255,.06) 42%,rgba(255,255,255,.14));
+  --gl-shadow:0 14px 42px rgba(10,20,50,.20);
+  --gl-inset:inset 0 1px 0 rgba(255,255,255,.55),inset 0 -1px 0 rgba(255,255,255,.10);
+}
+:root[data-theme="dark"] .rm,.dark .rm{--gl-edge:color-mix(in srgb,#fff 24%,transparent);--gl-edge-soft:color-mix(in srgb,#fff 13%,transparent);--gl-shine:linear-gradient(135deg,rgba(255,255,255,.16),rgba(255,255,255,.03) 42%,rgba(255,255,255,.08));--gl-shadow:0 14px 42px rgba(0,0,0,.42);--gl-inset:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -1px 0 rgba(255,255,255,.05)}
+
+/* ---------- the backdrop everything blurs ---------- */
+.rm-live::before{
+  background:
+    radial-gradient(46% 40% at 14% 88%,color-mix(in srgb,var(--b1) 46%,transparent),transparent 72%),
+    radial-gradient(40% 36% at 88% 84%,hsl(268 85% 68% / .40),transparent 72%),
+    radial-gradient(34% 30% at 60% 6%,hsl(190 90% 62% / .30),transparent 72%),
+    radial-gradient(28% 26% at 6% 12%,hsl(24 95% 72% / .26),transparent 72%),
+    linear-gradient(180deg,color-mix(in srgb,var(--b1) 8%,var(--surface)),color-mix(in srgb,var(--b1) 14%,var(--surface2)))}
+
+/* ---------- one recipe for every glass surface ---------- */
+.rm .rm-top,.rm .rm-log,.rm .rm-cap p,.rm .rm-status,.rm .rm-type,.rm .rm-brief,.rm .rm-work,
+.rm .rm-ctl,.rm .rm-clock,.rm .rm-setup .rm-row,.rm .rm-person,.rm .rm-opts,.rm .rm-me{
+  background-color:var(--gl-fill);background-image:var(--gl-shine);
+  border:1px solid var(--gl-edge-soft);
+  -webkit-backdrop-filter:blur(var(--gl-blur)) saturate(var(--gl-sat));backdrop-filter:blur(var(--gl-blur)) saturate(var(--gl-sat));
+  box-shadow:var(--gl-shadow),var(--gl-inset)}
+
+/* ---------- top bar ---------- */
+.rm .rm-top{margin:.7rem .7rem 0;padding:.6rem 1rem;border-radius:20px;border-bottom:1px solid var(--gl-edge-soft)}
+.rm .rm-prog .bar{background:color-mix(in srgb,#fff 24%,transparent);box-shadow:inset 0 1px 2px rgba(10,20,50,.18);height:5px}
+.rm .rm-prog .bar i{background:linear-gradient(90deg,var(--b1),var(--b2));opacity:1;border-radius:5px}
+.rm .rm-clock{padding:.3rem .75rem;border-radius:999px;min-width:0;box-shadow:var(--gl-inset)}
+
+/* ---------- tiles: glass frame around each person ---------- */
+.rm .rm-tile,.rm .rm-me-pip{border:1px solid var(--gl-edge);box-shadow:0 18px 50px rgba(10,20,50,.26),var(--gl-inset)}
+.rm .rm-tile.on,.rm .rm-me-pip.talking{border-color:color-mix(in srgb,var(--b1) 80%,#fff 20%);box-shadow:0 0 0 3px color-mix(in srgb,var(--b1) 55%,transparent),0 0 38px color-mix(in srgb,var(--b1) 45%,transparent),0 18px 50px rgba(10,20,50,.28),var(--gl-inset)}
+.rm .rm-plate .who,.rm .rm-state,.rm .rm-bars,.rm .rm-me-pip .chip{
+  background-color:var(--gl-fill-2);background-image:var(--gl-shine);border:1px solid var(--gl-edge-soft);
+  -webkit-backdrop-filter:blur(14px) saturate(160%);backdrop-filter:blur(14px) saturate(160%);box-shadow:var(--gl-inset)}
+.rm .rm-plate .who{border-radius:14px;padding:.45rem .75rem}
+.rm .rm-state{display:inline-flex;align-items:center;gap:.4rem;color:var(--ink2);font-weight:500}
+.rm .rm-state::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--mut);flex:none}   /* listening: a quiet grey dot */
+.rm .rm-tile.on .rm-state,.rm .rm-me-pip.talking .rm-state{color:var(--ink);background-color:color-mix(in srgb,var(--b1) 30%,var(--surface) 38%)}
+.rm .rm-tile.on .rm-state::before,.rm .rm-me-pip.talking .rm-state::before{background:var(--b1);box-shadow:0 0 0 3px color-mix(in srgb,var(--b1) 30%,transparent),0 0 10px var(--b1)}   /* speaking: a lit dot */
+.rm .rm-bars i{background:var(--b1)}
+.rm .rm-nocam{background:linear-gradient(180deg,color-mix(in srgb,var(--b1) 16%,var(--surface)),color-mix(in srgb,var(--b1) 6%,var(--surface2)));-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px)}
+
+/* ---------- caption, status, typing box ---------- */
+.rm .rm-cap p{padding:.7rem 1.3rem;border-radius:22px}
+.rm .rm-cap p.me{color:var(--ink2)}
+.rm .rm-status{width:fit-content;max-width:100%;margin:0 auto;padding:.3rem .95rem;border-radius:999px;color:var(--ink2)}
+.rm .rm-status:empty{display:none}
+.rm .rm-type{padding:.5rem;border-radius:22px}
+.rm .rm-type textarea{background:var(--gl-fill-3);border:1px solid var(--gl-edge-soft);border-radius:16px;box-shadow:inset 0 1px 3px rgba(10,20,50,.12);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+
+/* ---------- transcript panel ---------- */
+.rm .rm-log{margin:.7rem .7rem .7rem 0;border-radius:24px;overflow:hidden}
+.rm .rm-log h2{background:transparent;border-bottom:1px solid var(--gl-edge-soft)}
+.rm .rm-live-cap{border-top:1px solid var(--gl-edge-soft);background:transparent}
+.rm .rm-msg{padding:.55rem .8rem;border-radius:16px;background:color-mix(in srgb,#fff 16%,transparent);border:1px solid var(--gl-edge-soft);box-shadow:var(--gl-inset)}
+.rm .rm-msg.c{border-left:1px solid var(--gl-edge-soft);background:color-mix(in srgb,var(--b1) 16%,transparent);padding-left:.8rem}
+.rm .rm-msg.note{background:transparent;border-color:transparent;box-shadow:none}
+
+/* ---------- hands-on task ---------- */
+.rm .rm-brief,.rm .rm-work{border-radius:22px;overflow:hidden}
+.rm .rm-wbar{border-bottom:1px solid var(--gl-edge-soft)}
+.rm .rm-code{background:var(--gl-fill-3);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.rm .rm-res{border-top:1px solid var(--gl-edge-soft)}
+.rm .rm-wbar select,.rm .rm-opts select{background:var(--gl-fill-2);border:1px solid var(--gl-edge-soft);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+
+/* ---------- every button ---------- */
+.rm .rm-btn{
+  position:relative;color:var(--ink);
+  background-color:color-mix(in srgb,#fff 18%,transparent);background-image:var(--gl-shine);
+  border:1px solid var(--gl-edge);
+  -webkit-backdrop-filter:blur(14px) saturate(170%);backdrop-filter:blur(14px) saturate(170%);
+  box-shadow:0 6px 18px rgba(10,20,50,.14),var(--gl-inset);
+  transition:background-color .18s,box-shadow .18s,transform .12s,border-color .18s}
+.rm .rm-btn::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:radial-gradient(120% 90% at 50% -20%,rgba(255,255,255,.5),transparent 55%);opacity:.55;transition:opacity .18s}   /* the glint across the top edge */
+.rm .rm-btn:hover{background-color:color-mix(in srgb,#fff 30%,transparent);box-shadow:0 8px 24px rgba(10,20,50,.2),var(--gl-inset)}
+.rm .rm-btn:hover::before{opacity:.85}
+.rm .rm-btn:active{transform:translateY(1px) scale(.985);box-shadow:0 3px 10px rgba(10,20,50,.16),var(--gl-inset)}
+.rm .rm-btn.go{color:var(--on-b1);background-color:color-mix(in srgb,var(--b1) 72%,transparent);border-color:color-mix(in srgb,var(--b1) 50%,#fff 35%)}
+.rm .rm-btn.go:hover{background-color:color-mix(in srgb,var(--b1) 88%,transparent)}
+.rm .rm-btn.end{color:#fff;background-color:color-mix(in srgb,var(--bad) 78%,transparent);border-color:color-mix(in srgb,var(--bad) 50%,#fff 35%)}
+.rm .rm-btn.end:hover{background-color:color-mix(in srgb,var(--bad) 92%,transparent)}
+.rm .rm-btn.muted,.rm .rm-btn.off{color:#fff;background-color:color-mix(in srgb,var(--bad) 55%,transparent);border-color:color-mix(in srgb,var(--bad) 55%,#fff 30%)}
+.rm .rm-btn[disabled]{opacity:.5;box-shadow:var(--gl-inset)}
+.rm .rm-btn:focus-visible{outline:2px solid #fff;outline-offset:2px;box-shadow:0 0 0 5px color-mix(in srgb,var(--b1) 70%,transparent)}
+
+/* ---------- control dock ---------- */
+.rm .rm-ctl{border-radius:30px;padding:.6rem .7rem;gap:.55rem;border:1px solid var(--gl-edge);box-shadow:0 18px 52px rgba(10,20,50,.26),var(--gl-inset)}
+.rm .rm-ctl .rm-btn{border-radius:22px;min-width:68px;background-color:color-mix(in srgb,#fff 16%,transparent)}
+.rm .rm-ctl .rm-btn.go{background-color:color-mix(in srgb,var(--b1) 72%,transparent)}
+.rm .rm-ctl .rm-btn.end{background-color:color-mix(in srgb,var(--bad) 78%,transparent);margin-left:.5rem}
+.rm .rm-ctl .rm-btn.muted,.rm .rm-ctl .rm-btn.off{background-color:color-mix(in srgb,var(--bad) 55%,transparent)}
+.rm .rm-ctl .rm-sep{width:1px;align-self:stretch;margin:.35rem .1rem;background:var(--gl-edge-soft)}
+
+/* ---------- lobby (before joining) ---------- */
+.rm .rm-setup{background:
+    radial-gradient(46% 40% at 12% 90%,color-mix(in srgb,var(--b1) 30%,transparent),transparent 72%),
+    radial-gradient(40% 36% at 92% 14%,hsl(268 85% 68% / .26),transparent 72%),
+    radial-gradient(30% 28% at 60% 100%,hsl(190 90% 62% / .22),transparent 72%)}
+.rm .rm-person{border-radius:16px}
+.rm .rm-person.off{opacity:.45}
+.rm .rm-setup .rm-row{border-radius:16px;box-shadow:var(--gl-inset)}
+.rm .rm-opts{padding:.8rem 1rem;border-radius:18px;color:var(--ink2)}
+.rm .rm-me{border-radius:20px;padding:0}
+.rm .rm-meter{background:color-mix(in srgb,#fff 24%,transparent)}
+
+/* ---------- small screens ---------- */
+@media (max-width:900px){
+  .rm .rm-top{margin:.5rem .5rem 0;padding:.5rem .8rem}
+  .rm .rm-log{margin:0;border-radius:0;border-width:0}
+  .rm .rm-ctl{border-radius:26px;padding:.45rem .5rem}
+  .rm .rm-ctl .rm-btn{min-width:48px;border-radius:50%}
+  .rm .rm-ctl .rm-sep{display:none}
+}
+
+/* ---------- fallbacks ---------- */
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .rm{--gl-fill:color-mix(in srgb,var(--surface) 90%,transparent);--gl-fill-2:color-mix(in srgb,var(--surface) 92%,transparent)}
+  .rm .rm-btn{background-color:color-mix(in srgb,var(--surface) 88%,transparent)}
+}
+@media (prefers-reduced-transparency:reduce){
+  .rm{--gl-fill:var(--surface);--gl-fill-2:var(--surface);--gl-fill-3:var(--surface)}
+  .rm .rm-btn{background-color:var(--surface2)}
+  .rm .rm-btn.go{background-color:var(--b1)}.rm .rm-btn.end{background-color:var(--bad)}
+  .rm *{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+}
+@media (prefers-reduced-motion:reduce){.rm .rm-btn,.rm .rm-btn::before{transition:none}}
+
+/* live voice mode: the conversation is hands-free, so the push-to-talk controls are hidden */
+.live-on #stopbtn,.live-on #send,.live-on #kbbtn,.live-on #limitbox{display:none}

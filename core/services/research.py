@@ -198,7 +198,11 @@ RESEARCH NOTES BY ANGLE:
 {_RULES} Write in {lang}.{SHORT if short else ""}
 JSON shape: {{"findings": [{{"claim": str, "kind": "confirmed|candidate_reported|inferred", "confidence": "low|medium|high", "relevance": str, "source_hint": str, "source_date": str}}],
 "likely_questions": [{{"q": str, "why": "why they ask it", "strong": "what a strong answer contains, under 30 words", "seen_in": int, "origin": "official|forum|video|inferred"}}],
-"questions_to_ask": [str], {task}}}
+"questions_to_ask": [str], {task},
+"panel": {{"found": true|false, "count": 1-3, "roles": [str], "why": "one sentence naming the evidence", "status": "confirmed|candidate_reported|inferred"}},
+"required_documents": [{{"key": "short_snake_case", "label": "e.g. Bank statements of your sponsor", "why": "why the interviewers need it", "must": true|false}}]}}
+"panel": how many people actually interview a candidate in this real process (a visa interview is one consular officer; a scholarship is often a panel of 3; a startup is often a founder plus one engineer). Set "found": false and leave "count" out if the notes do not say; never guess a number. "roles" are the job titles of those people.
+"required_documents": the documents or evidence a real interviewer for THIS process expects the candidate to have prepared and to be able to cite (for a student visa: admission letter or I-20, proof of funds, sponsor letter, passport, academic transcripts, proof of ties; for an investor pitch: financial model, cap table). Up to 8, only what the notes support or the process obviously requires, most important first. Do not list the CV, the job description or the pitch deck if they were already given above.
 Give up to 12 findings, 10 likely_questions (use real reported questions first, then likely ones) and 5 questions_to_ask."""
 
 SHORT = "\nIMPORTANT: a previous answer was cut off or invalid. Answer with valid JSON only, a little shorter: fewer and shorter items."
@@ -227,7 +231,7 @@ def _synthesise(ws, ctx, lang, notes):
         with TPE(max_workers=2) as ex: f2 = ex.submit(part2); d = dict(_ask_json(lambda sc, sh: _synth_prompt(ws, ctx, lang, notes, sc, sh), 8000)); d2 = f2.result()
     else:
         d = dict(_ask_json(lambda sc, sh: _synth_prompt(ws, ctx, lang, notes, sc, sh), 8000)); d2 = part2()                                                                   # the prep list is a bonus: keep the briefing if only this part fails
-    d.update({k: v for k, v in d2.items() if k in ("findings", "likely_questions", "questions_to_ask", "assessment")})
+    d.update({k: v for k, v in d2.items() if k in ("findings", "likely_questions", "questions_to_ask", "assessment", "panel", "required_documents")})
     if not d2: d["partial"] = "The question list could not be written this time. Run the research again to add it."
     return d
 
@@ -247,7 +251,17 @@ def _clean(d, ws):
           for n in d.get("key_numbers", []) if isinstance(n, dict) and n.get("label") and n.get("value")][:8]
     a = d.get("assessment") if isinstance(d.get("assessment"), dict) else {}
     assessment = {"build": a.get("build") if a.get("build") in ("none", "coding", "written") else "none", "track": str(a.get("track", "other"))[:20], "why": str(a.get("why", ""))[:240], "status": _status(a.get("status"))}
-    out = dict(d); out.update(key_numbers=kn, assessment=assessment, sections=sections, topics=topics, likely_questions=lq, skills=[str(x)[:60] for x in d.get("skills", [])][:14], stages=[str(x)[:140] for x in d.get("stages", [])][:8],
+    pn = d.get("panel") if isinstance(d.get("panel"), dict) else {}
+    try: pc = int(pn.get("count"))
+    except (TypeError, ValueError): pc = 0
+    panel = {"found": bool(pn.get("found", True)) and 1 <= pc <= 3, "count": pc if 1 <= pc <= 3 else None, "roles": [str(x)[:60] for x in (pn.get("roles") or []) if x][:4], "why": str(pn.get("why", ""))[:240], "status": _status(pn.get("status"))}
+    rd, seen_k = [], set()
+    for x in d.get("required_documents", []) if isinstance(d.get("required_documents"), list) else []:
+        if not isinstance(x, dict) or not x.get("label"): continue
+        k = re.sub(r"[^a-z0-9]+", "_", str(x.get("key") or x["label"]).lower()).strip("_")[:30] or "doc"
+        if k in seen_k: continue
+        seen_k.add(k); rd.append({"key": k, "label": str(x["label"])[:90], "why": str(x.get("why", ""))[:200], "must": bool(x.get("must", True))})
+    out = dict(d); out.update(panel=panel, required_documents=rd[:8], key_numbers=kn, assessment=assessment, sections=sections, topics=topics, likely_questions=lq, skills=[str(x)[:60] for x in d.get("skills", [])][:14], stages=[str(x)[:140] for x in d.get("stages", [])][:8],
                               questions_to_ask=[str(x)[:240] for x in d.get("questions_to_ask", [])][:8])
     return out
 

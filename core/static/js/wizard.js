@@ -57,7 +57,7 @@
     const kindObj = () => cfg.kinds && cfg.kinds[A.kind];
 
     function build() {
-      let s = cfg.kinds ? [...cfg.head, ...(kindObj() ? kindObj().steps : []), ...cfg.tail] : [...cfg.steps];
+      let s = cfg.kinds ? [...cfg.head, ...(kindObj() ? kindObj().steps : []), ...cfg.tail, ...(kindObj() && kindObj().docSteps ? kindObj().docSteps.map(x => Object.assign({}, x)) : [])] : [...cfg.steps];
       s.push(cfg.review ? { id: "review", type: "review" } : { id: "done", type: "done" });
       steps = s;
     }
@@ -160,7 +160,7 @@
       return [h("div", { class: "wz-field" }, box, sg, msg), example(s)];
     }
     function fileBox(name, accept, label, onfile) {
-      const input = form.querySelector(`input[type=file][name="${name}"]`), out = h("div"); if (!input) return h("p", { class: "wz-help" }, "File upload is not available here.");
+      let input = form.querySelector(`input[type=file][name="${name}"]`); const out = h("div"); if (!input && name) { input = h("input", { type: "file", name, accept: accept || ".pdf,.docx,.txt" }); form.append(input); } if (!input) return h("p", { class: "wz-help" }, "File upload is not available here.");
       const show = () => { out.innerHTML = ""; if (input.files && input.files[0]) out.append(h("div", { class: "wz-file" }, h("span", {}, "File:"), h("b", {}, input.files[0].name), h("button", { type: "button", onclick: () => { input.value = ""; show(); } }, "Remove"))); };
       const drop = h("button", { type: "button", class: "wz-drop", onclick: () => input.click() }, h("div", { class: "big" }, "⬆"), h("b", {}, label || "Drop a file here, or click to choose"), h("small", { style: "color:var(--mut)" }, "PDF, Word or text"));
       ["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
@@ -201,6 +201,32 @@
       } }, "Paste from clipboard") : null;
       return [h("div", { class: "wz-field" }, ta, pasteBtn, msg, h("p", { class: "wz-help", style: "margin:.9rem 0 .5rem" }, "Or upload it instead:"), fileBox(s.file, s.accept, s.dropLabel, read), status), example(s)];
     }
+    function applyDocs(s, d) {   // the quick check found these documents: ask for each one, right after the main document
+      s.ready = true; s.docs = (d && d.docs) || []; s.src = d && d.source; const kd = kindObj() || {};
+      A.docs_manifest = JSON.stringify(s.docs.map(x => ({ key: x.key, label: x.label, why: x.why, must: x.must })));
+      for (let i = steps.length - 1; i >= 0; i--) if (steps[i].dyn) steps.splice(i, 1);
+      const dyn = s.docs.map(x => ({ id: "xd_" + x.key, dyn: true, name: A.kind + "__doc_" + x.key, file: "xdoc_" + x.key, type: "doc", accept: ".pdf,.docx,.txt", chapter: s.chapter, label: x.label, q: "Do you have your " + x.label.toLowerCase() + "?",
+        help: (x.why ? x.why + " " : "") + "Paste the text or upload it. No problem if you do not have it yet: skip it and add it later from your workspace.", ph: "Paste the text here, or upload a file below.", dropLabel: "Drop a file here, or click to choose", eg: "" }));
+      const at = steps.findIndex(x => x.id === kd.docKey); steps.splice(at >= 0 ? at + 1 : idx + 1, 0, ...dyn);
+    }
+    function rResearch(s) {
+      const status = h("div", { class: "wz-scan-s busy" }), list = h("div", { class: "wz-scan-l" }), wrap = h("div", { class: "wz-scan" }, status, list);
+      const co = (A[s.company] || "").trim() || "this organisation";
+      const show = () => {
+        const n = s.docs.length; status.className = "wz-scan-s ok";
+        status.textContent = n ? `I found ${n} document${n > 1 ? "s" : ""} this interview usually expects${s.src === "web" ? ", checked online" : ""}. I'll ask for the main one first.` : "Nothing extra is needed for this one. We can carry on.";
+        list.innerHTML = ""; s.docs.forEach(d => list.append(h("div", { class: "wz-doc" }, h("div", {}, h("b", {}, d.label), d.must ? h("span", { class: "chip" }, "Usually required") : null), d.why ? h("small", {}, d.why) : null)));
+        go.disabled = false; talk();
+      };
+      if (s.ready) { show(); return [wrap]; }
+      go.disabled = true; const msgs = [`Looking up what ${co} asks applicants for…`, "Checking the official guidance…", "Choosing what matters most…"]; let i = 0; status.textContent = msgs[0];
+      const t = setInterval(() => { if (!card.contains(status) || s.ready) { clearInterval(t); return; } status.textContent = msgs[Math.min(++i, msgs.length - 1)]; }, 1400);
+      const body = { kind: A.kind, company: A[s.company] || "", position: A[s.position] || "", jd: A[A.kind + "__jd"] || "" };
+      fetch(cfg.docsUrl, { method: "POST", headers: { "Content-Type": "application/json", "X-CSRFToken": token() }, body: JSON.stringify(body) })
+        .then(r => r.json()).then(d => d && !d.error ? d : { docs: [], source: "default" }).catch(() => ({ docs: [], source: "default" }))
+        .then(d => { clearInterval(t); applyDocs(s, d); if (steps[idx] === s && card.contains(status)) show(); });
+      return [wrap];
+    }
     function rRange(s) {
       const big = h("div", { class: "wz-big" }), r = h("input", { type: "range", class: "wz-range", min: s.min, max: s.max, step: s.step || 1 }), pre = h("div", { class: "wz-presets" });
       r.value = A[s.name] || s.def || s.min;
@@ -239,12 +265,12 @@
 
     // ---------- flow ----------
     function render(dir) {
-      const s = steps[idx]; palette(s); msg.textContent = "";
+      const s = steps[idx]; palette(s); msg.textContent = ""; go.disabled = false;
       card.innerHTML = ""; const type = s.type;
       if (type === "intro") card.append(intro(s));
       else if (type === "done") card.append(done(s));
       else {
-        const body = { text: () => rText(s, false), textarea: () => rText(s, true), select: () => rSelect(s), kind: () => rKind(s), tags: () => rTags(s), file: () => rFile(s), doc: () => rDoc(s), range: () => rRange(s), date: () => rDate(s), review: () => rReview(s) }[type]();
+        const body = { text: () => rText(s, false), textarea: () => rText(s, true), select: () => rSelect(s), kind: () => rKind(s), tags: () => rTags(s), file: () => rFile(s), doc: () => rDoc(s), range: () => rRange(s), date: () => rDate(s), review: () => rReview(s), research: () => rResearch(s) }[type]();
         card.append(...[...head(s), ...body].filter(Boolean));
       }
       const total = steps.length - 1, shown = Math.min(idx, total);
@@ -275,7 +301,7 @@
     function jump(i) { if (busy) return; busy = true; const dir = i > idx ? 1 : -1; leave(dir, () => { idx = i; render(dir); }); }
     function leave(dir, cb) { const a = anim(card, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: `translateX(${-dir * 40}px) scale(.98)` }], { duration: 220, easing: "ease-in" }); a ? (a.onfinish = cb) : cb(); }
     function next(ev) {
-      const s = steps[idx]; if (thinking) return; if (s.type === "review") return finish({}); if (!valid(s)) return;
+      const s = steps[idx]; if (thinking) return; if (s.type === "review") return finish({}); if (s.type === "research") { if (s.ready) move(1); return; } if (!valid(s)) return;
       if (s.name && has(s) && ![ "intro", "done" ].includes(s.type)) react(go.hidden ? card : go);
       if (wantsAdapt(s)) { think_(ev); return; }   // the guide decides what to ask next from what was just said
       move(1);
@@ -293,7 +319,7 @@
     }
     const wantsAdapt = s => !!(cfg.adaptUrl && s && s.adapt && returnTo == null && planRequest());
     async function adapt() {   // asks the guide; any trouble (slow, busy, rate limited, offline) just means the normal order carries on
-      const body = planRequest(); if (!body) return; const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 9000);
+      const body = planRequest(); if (!body) return; const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 6000);
       try {
         const r = await fetch(cfg.adaptUrl, { method: "POST", headers: { "Content-Type": "application/json", "X-CSRFToken": token() }, body: JSON.stringify(body), signal: ctl.signal });
         const d = await r.json().catch(() => null); if (r.ok && d && !d.error && !d.fallback) applyPlan(d);
@@ -302,7 +328,7 @@
     }
     function showThinking() {
       clearInterval(thinkTimer); let i = 0; thinkTx.textContent = THINK[0]; think.hidden = false; nav.classList.add("is-thinking"); card.classList.add("wz-wait"); orb.classList.add("think");
-      thinkTimer = setInterval(() => { i = Math.min(i + 1, THINK.length - 1); thinkTx.textContent = THINK[i]; }, 1500);
+      thinkTimer = setInterval(() => { i = Math.min(i + 1, THINK.length - 1); thinkTx.textContent = THINK[i]; }, 900);
     }
     function hideThinking() {   // the buttons come back, re-forming, now that the next question is on screen
       clearInterval(thinkTimer); clearTimeout(watchdog); think.hidden = true; nav.classList.remove("is-thinking"); card.classList.remove("wz-wait"); orb.classList.remove("think"); thinking = false; go.disabled = false;
@@ -312,9 +338,9 @@
       thinking = true; const t0 = Date.now(), here = idx;
       if (!go.hidden && window.rwShatter) rwShatter(go, { event: ev, keepHidden: true });   // the button shatters and does NOT come back yet
       showThinking(); say("Let me think about that…"); talk();
-      watchdog = setTimeout(() => { afterRender = null; hideThinking(); }, 16000);          // whatever happens, the buttons always come back
+      watchdog = setTimeout(() => { afterRender = null; hideThinking(); }, 8000);          // whatever happens, the buttons always come back
       try { await adapt(); } catch (e) { /* ignored: the normal order carries on */ }
-      const rest = (REDUCE ? 0 : 1100) - (Date.now() - t0); if (rest > 0) await new Promise(r => setTimeout(r, rest));   // long enough to see it think, and for the shards to clear
+      const rest = (REDUCE ? 0 : 450) - (Date.now() - t0); if (rest > 0) await new Promise(r => setTimeout(r, rest));   // long enough to see it think, and for the shards to clear
       if (idx !== here) { hideThinking(); return; }                                          // the person moved on in the meantime
       afterRender = hideThinking; move(1); if (!busy) { afterRender = null; hideThinking(); }
     }

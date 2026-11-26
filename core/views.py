@@ -1,5 +1,5 @@
-import json, time
-from datetime import date
+import json, re, time
+from datetime import date, timedelta
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
@@ -7,10 +7,11 @@ from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
+from django.conf import settings
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from .models import *
-from .services import agents, ai, logic, docs, tts, stt, storage, kinds, panelplan, langs, wizard
+from .services import agents, ai, logic, docs, tts, stt, storage, kinds, panelplan, langs, wizard, factcheck, planner, live
 from . import jobs
 
 AVATARS = ["img/i06.png","img/i07.png","img/i08.png","img/i09.png","img/i10.png","img/i11.png","img/i12.png","img/i13.png","img/i19.png"]
@@ -85,10 +86,10 @@ def dashboard(request):
         rows.append({"w": w, "pct": round(100 * d / t) if t else 0, "tasks": t, "done": d, "sessions": sess, "steps": steps, "next": nxt,
                      "left": (w.date - today).days if w.date and not w.general else None, "panel": list(w.panel.all()), "diff": w.get_difficulty_display(), "kind_icon": kinds.profile(w.kind)["icon"]})
     hour = timezone.localtime().hour; hello = "Good morning" if hour < 12 else "Good afternoon" if hour < 18 else "Good evening"
-    scored = [v for v in mem.values()]
+    scored = [v for v in mem.values()]; progress = planner.progress(request.user)
     due = PrepTask.objects.filter(workspace__user=request.user, done=False, due__lte=today).select_related("workspace")
     return render(request, "core/dashboard.html", {"rows": rows, "profile": p, "hello": hello, "display_name": (p.full_name.split()[0] if p.full_name else request.user.username), "cards": KIND_CARDS,
-        "stats": {"active": len(rows), "due": due.count(), "sessions": Session.objects.filter(workspace__user=request.user, status="done").count(), "avg": round(sum(scored) / len(scored)) if scored else None},
+        "progress": progress, "stats": {"active": len(rows), "due": due.count(), "sessions": Session.objects.filter(workspace__user=request.user, status="done").count(), "avg": round(sum(scored) / len(scored)) if scored else None},
         "mem": [(l, mem.get(c)) for c, l in CATS], "mem_json": json.dumps([mem.get(c, 0) for c, _ in CATS]), "labels": json.dumps([l for _, l in CATS]),
         "sessions": Session.objects.filter(workspace__user=request.user, status="done").select_related("workspace").order_by("-started_at")[:5], "due": due[:6], "ivs": Interviewer.objects.filter(owner=None)[:5]})
 
@@ -157,6 +158,16 @@ def wizard_adapt(request):
     cust = [{"key": str(c.get("key"))[:6], "q": str(c.get("q", ""))[:200], "answered": bool(c.get("answered"))} for c in (d.get("custom") or []) if isinstance(c, dict)][:wizard.MAX_EXTRA]
     return JsonResponse(wizard.adapt(kind, ans, rem, cust))
 
+@login_required
+@require_POST
+def wizard_docs(request):
+    """The quick check just before the flow asks for documents: which ones does this interview expect? Always answers (falls back to a short list)."""
+    try: d = json.loads(request.body or b"{}")
+    except ValueError: d = {}
+    kind = d.get("kind")
+    if kind not in kinds.PROFILES: return JsonResponse({"error": "Unknown interview type."}, status=400)
+    return JsonResponse(wizard.docs_research(kind, str(d.get("company", "")), str(d.get("position", "")), str(d.get("jd", ""))))
+
 DOC_TEXT_MAX = 6000
 
 @login_required
@@ -199,6 +210,17 @@ def workspace_new(request):
         ws = Workspace.objects.create(user=request.user, title=P.get("title") or f"{company} {position}".strip() or pf["label"], kind=kind, company=company, position=position, date=d, general=not d,
             duration=int(P.get("duration") or pf["duration"]), fmt=pf["format"], known_interviewers=P.get("known_interviewers", "")[:500], prep_days=int(P.get("prep_days") or 7), job_description=jd, details=details,
             documents={dk: mydoc} if mydoc else {})
+        try: plan = json.loads(P.get("docs_manifest") or "[]")
+        except ValueError: plan = []
+        keep, have = [], {}
+        for m in (plan if isinstance(plan, list) else [])[:8]:   # the documents the quick check found: what was given is saved with the same keys the workspace checklist uses
+            if not isinstance(m, dict): continue
+            mk = re.sub(r"[^a-z0-9_]", "", str(m.get("key", "")).lower())[:30]
+            if not mk or not str(m.get("label", "")).strip(): continue
+            keep.append({"key": mk, "label": str(m["label"])[:90], "why": str(m.get("why", ""))[:200], "must": bool(m.get("must", True))})
+            txt = _read_doc(P, request.FILES, pre + "doc_" + mk, "xdoc_" + mk)[:DOC_TEXT_MAX]
+            if txt: have["doc_" + mk] = txt
+        if keep or have: ws.docs_plan = keep; ws.documents = dict(ws.documents or {}, **have); ws.save(update_fields=["docs_plan", "documents"])
         if dk == "cv" and mydoc and not prof.cv_text: prof.cv_text = mydoc; prof.save()   # first CV ever given: keep it on the profile so the next interview starts with it
         logic.ensure_seed(); panelplan.allocate(ws)  # the system assigns the panel and difficulty
         return redirect("ws", pk=ws.pk)
@@ -208,7 +230,9 @@ KIND_EMOJI = {"startup": "🚀", "employment": "💼", "internship": "🎒", "gr
 NAME_EG = {"startup": ("Flutterwave", "Backend engineer"), "employment": ("Microsoft", "Product manager"), "internship": ("Google", "Software engineering intern"), "graduate": ("Unilever", "Future Leaders Programme"),
            "admission": ("University of Edinburgh", "MSc Data Science"), "scholarship": ("Chevening", "Master's degree"), "visa": ("United Kingdom", "Student visa"), "fellowship": ("Fulbright at Harvard", "Public health research"),
            "pitch": ("Omega", "Y Combinator seed round"), "certification": ("AWS", "Solutions Architect Associate")}
-CHAPTER_SAY = {kinds.OPP: "Let's start with the opportunity itself.", kinds.YOU: "Now a bit about you. This is what makes the practice personal.", kinds.INT: "Almost done. A few questions about the interview itself."}
+APP, WHY, DOCSEC = "Your application", "Why you chose it", "Your documents"   # the three main parts of the new-interview flow
+CHAPTER_SAY = {APP: "Let's start with your application.", WHY: "Now the reasons behind it. This is what makes the practice personal.", kinds.YOU: "A little more about you, so the questions fit your real background.",
+               kinds.INT: "Almost done with the questions. A few about the interview itself.", DOCSEC: "Last part: your documents. First I'll check which ones this interview expects."}
 
 def interview_config(preselect="", profile=None):
     """The guided new-interview flow. Every interview type has its own questions, one at a time; only the essential ones cannot be skipped."""
@@ -216,24 +240,26 @@ def interview_config(preselect="", profile=None):
     for k in kinds.ORDER:
         pf = kinds.profile(k); co, po = NAME_EG[k]; steps = []; seen = set()
         def chapter(sec):
-            first = sec not in seen; seen.add(sec); return {"chapter": sec, "say": CHAPTER_SAY[sec]} if first else {"chapter": sec}
-        steps.append(dict(id="company", name=f"{k}__company", type="text", label=pf["company_label"], q=("What's " + pf["company_label"].lower() + "?") if pf["company_label"].lower().startswith("your ") else f"What's the {pf['company_label'].lower()}?", eg=co, req=True, adapt=True, reqMsg="I need this to research the right thing.", **chapter(kinds.OPP)))
-        steps.append(dict(id="position", name=f"{k}__position", type="text", label=pf["position_label"].split(",")[0], q=f"And the {pf['position_label'].split(',')[0].lower()}?", eg=po, req=True, adapt=True, reqMsg="I need this to research the right thing.", **chapter(kinds.OPP)))
-        def add(f):
-            st = dict(id=f["key"], name=f"{k}__{f['key']}", type=f["type"], label=f["short"], q=f["label"], eg=f["ph"], req=f["req"], adapt=True, reqMsg="This one matters for a good result. A few words is enough.", **chapter(f["sec"]))
+            sec = APP if sec == kinds.OPP else sec; first = sec not in seen; seen.add(sec); return {"chapter": sec, "say": CHAPTER_SAY[sec]} if first else {"chapter": sec}
+        steps.append(dict(id="company", name=f"{k}__company", type="text", label=pf["company_label"], q=("What's " + pf["company_label"].lower() + "?") if pf["company_label"].lower().startswith("your ") else f"What's the {pf['company_label'].lower()}?", eg=co, req=True, adapt=True, reqMsg="I need this to research the right thing.", **chapter(APP)))
+        steps.append(dict(id="position", name=f"{k}__position", type="text", label=pf["position_label"].split(",")[0], q=f"And the {pf['position_label'].split(',')[0].lower()}?", eg=po, req=True, adapt=True, reqMsg="I need this to research the right thing.", **chapter(APP)))
+        def add(f, sec=None):
+            st = dict(id=f["key"], name=f"{k}__{f['key']}", type=f["type"], label=f["short"], q=f["label"], eg=f["ph"], req=f["req"], adapt=True, reqMsg="This one matters for a good result. A few words is enough.", **chapter(sec or f["sec"]))
             if f["type"] == "select": st["options"] = [{"value": o, "label": o} for o in f["options"]]
             if f["type"] == "text" and len(f["ph"]) > 60: st["type"] = "textarea"
             steps.append(st)
-        opp = [f for f in pf["fields"] if f["sec"] == kinds.OPP]
-        for f in opp: add(f)
-        steps.append(dict(id="jd", name=f"{k}__jd", type="doc", file="jd", accept=".pdf,.docx,.txt", label=pf["doc_label"], q=f"Do you have the {pf['doc_label'].lower()}?", help="Paste the text or upload it, and I'll ask about what is really in it. Skip it if you don't have it yet.", eg="", dropLabel="Drop a file here, or click to choose", chapter=kinds.OPP, adapt=True))
-        d = kinds.doc(k); have = bool(d["profile_cv"] and profile and (profile.cv_text or "").strip())
-        steps.append(dict(id=d["key"], name=f"{k}__{d['key']}", type="doc", file="doc_" + d["key"], accept=".pdf,.docx,.txt", label=d["short"], q=d["q"], req=True, adapt=True, ph=d["ph"], dropLabel=d["drop"], eg="",
-                          help=("I loaded the CV from your profile. Check it, replace it by pasting a different one, or upload a file." if have else d["help"]), reqMsg="I need this one so I can ask about your real background. Paste it or upload a file.", **chapter(kinds.YOU)))
-        if d["key"] == "cv": steps[-1].update(pasteOnly=True, minLen=80, ph="Copy your CV and paste it here. Typing is switched off.")   # a CV is pasted or uploaded, never typed
-        for f in pf["fields"]:
-            if f["sec"] != kinds.OPP: add(f)
-        kc[k] = {"label": pf["label"], "blurb": pf["blurb"], "emoji": KIND_EMOJI[k], "icon": pf["icon"], "duration": pf["duration"], "palette": pf["anim"]["c"], "plan": [x["label"] for x in pf["plan"]], "steps": steps,
+        why_keys = kinds.WHY_KEYS.get(k, []); by_key = {f["key"]: f for f in pf["fields"]}
+        for f in [f for f in pf["fields"] if f["sec"] == kinds.OPP and f["key"] not in why_keys]: add(f)       # part 1: your application
+        steps.append(dict(id="jd", name=f"{k}__jd", type="doc", file="jd", accept=".pdf,.docx,.txt", label=pf["doc_label"], q=f"Do you have the {pf['doc_label'].lower()}?", help="Paste the text or upload it, and I'll ask about what is really in it. Skip it if you don't have it yet.", eg="", dropLabel="Drop a file here, or click to choose", chapter=APP, adapt=True))
+        for x in why_keys:                                                                                       # part 2: why you chose it
+            if x in by_key: add(by_key[x], WHY)
+        for f in pf["fields"]:                                                                                     # the rest of your story and the interview itself
+            if f["sec"] != kinds.OPP and f["key"] not in why_keys: add(f)
+        d = kinds.doc(k); have = bool(d["profile_cv"] and profile and (profile.cv_text or "").strip()); doc_steps = [dict(id="docscan", type="research", chapter=DOCSEC, say=CHAPTER_SAY[DOCSEC], q="Checking which documents this interview expects", help="A quick look at what a real panel asks applicants to bring, so I only ask for what matters.", company=k + "__company", position=k + "__position", noSkip=True)]
+        doc_steps.append(dict(id=d["key"], name=f"{k}__{d['key']}", type="doc", file="doc_" + d["key"], accept=".pdf,.docx,.txt", label=d["short"], q=d["q"], req=True, ph=d["ph"], dropLabel=d["drop"], eg="", chapter=DOCSEC,
+                              help=("I loaded the CV from your profile. Check it, replace it by pasting a different one, or upload a file." if have else d["help"]), reqMsg="I need this one so I can ask about your real background. Paste it or upload a file."))
+        if d["key"] == "cv": doc_steps[-1].update(pasteOnly=True, minLen=80, ph="Copy your CV and paste it here. Typing is switched off.")   # a CV is pasted or uploaded, never typed
+        kc[k] = {"label": pf["label"], "blurb": pf["blurb"], "emoji": KIND_EMOJI[k], "icon": pf["icon"], "duration": pf["duration"], "palette": pf["anim"]["c"], "plan": [x["label"] for x in pf["plan"]], "steps": steps, "docSteps": doc_steps, "docKey": d["key"],
                  "hello": f"A {pf['label'].lower()}. I know exactly how to research that."}
     head = [{"id": "intro", "type": "intro", "q": "Let's set up your interview", "help": "A few quick questions, one at a time. Then I'll research it, build your panel and your plan. Skip anything that isn't essential.", "cta": "Start", "say": "Ready when you are."},
             {"id": "kind", "name": "kind", "type": "kind", "req": True, "label": "Type", "q": "What are you preparing for?", "help": "Pick the closest match. Each one gets its own research and its own questions.", "say": "Every type is researched differently."}]
@@ -241,7 +267,7 @@ def interview_config(preselect="", profile=None):
             {"id": "date", "name": "date", "type": "date", "label": "Interview date", "chapter": kinds.INT, "q": "When is the interview?", "help": "No date yet? No problem. I'll plan around the time you have.", "say": "Time to plan the countdown."},
             {"id": "dur", "name": "duration", "type": "range", "label": "Length", "chapter": kinds.INT, "q": "How long will the interview be?", "help": "Your practice interviews will match it.", "min": 5, "max": 90, "step": 5, "def": 30, "unit": " min", "presets": [10, 20, 30, 45, 60]}]
     return {"mode": "interview", "kinds": kc, "head": head, "tail": tail, "review": {"button": "Create my workspace"}, "values": dict({"kind": preselect} if preselect in kc else {}, **{f"{k}__cv": profile.cv_text[:6000] for k in kc if kinds.doc(k)["profile_cv"] and profile and (profile.cv_text or "").strip()}), "docUrl": "/w/doc/", "startAfterKind": preselect in kc,
-            "adaptUrl": "/w/adapt/", "launchTitle": "Building your workspace", "launch": ["Creating your workspace…", "Choosing your interviewers…", "Laying out your journey…"]}
+            "adaptUrl": "/w/adapt/", "docsUrl": "/w/docs/", "launchTitle": "Building your workspace", "launch": ["Creating your workspace…", "Choosing your interviewers…", "Laying out your journey…"]}
 
 @login_required
 def workspace(request, pk):
@@ -258,8 +284,8 @@ def workspace(request, pk):
     jdata = {"ws": ws.pk, "next": nxt, "done": [j["id"] for j in journey if j["done"]], "order": [j["id"] for j in journey], "labels": {j["id"]: j["label"] for j in journey},
              "has_tasks": bool(tasks), "researched": researched, "plan_url": f"/w/{ws.pk}/plan/", "panel": [i.name for i in ws.panel.all()]}
     left = (ws.date - date.today()).days if ws.date and not ws.general else None
-    return render(request, "core/workspace.html", {"ws": ws, "r": ws.research or {}, "findings": ws.findings.all(), "panel": ws.panel.all(), "mode": mode, "mode_why": mode_why, "kind_label": pf["label"],
-        "journey": journey, "journey_next": nxt, "jdata": jdata, "days_left": left, "tasks": tasks, "ready": ready, "sessions": sessions, "today": date.today(),
+    return render(request, "core/workspace.html", {"doc_list": agents.doc_checklist(ws), "needs_size": bool((ws.allocation or {}).get("needs_choice")), "ws": ws, "r": ws.research or {}, "findings": ws.findings.all(), "panel": ws.panel.all(), "mode": mode, "mode_why": mode_why, "kind_label": pf["label"],
+        "journey": journey, "journey_next": nxt, "jdata": jdata, "days_left": left, "tasks": tasks, "plan": [planner.card(t, ws, date.today()) for t in tasks], "ready": ready, "sessions": sessions, "today": date.today(),
         "rs_ui": {"kind": ws.kind, "title": pf["anim"]["title"], "sig": pf["anim"]["sig"], "colors": pf["anim"]["c"], "speed": pf["anim"]["speed"], "steps": kinds.research_steps(ws.kind), "name": ws.company or ws.title,
                   "job": f"/w/{ws.pk}/job/", "run": f"/w/{ws.pk}/research/", "running": ws.job_state == "running"}, "plan_steps": kinds.research_steps(ws.kind)[:-2]})
 
@@ -285,7 +311,26 @@ def do_adjust(request, pk):
 @login_required
 @require_POST
 def do_allocate(request, pk):
-    ws = mine(Workspace, request, pk); panelplan.allocate(ws, use_ai=bool(ws.research)); return JsonResponse({"ok": True})
+    ws = mine(Workspace, request, pk)
+    try: size = int(json.loads(request.body or b"{}").get("size") or 0) or None
+    except (ValueError, TypeError, AttributeError): size = None
+    if size and not panelplan.research_size(ws): ws.allocation = dict(ws.allocation or {}, chosen=max(1, min(3, size))); ws.save(update_fields=["allocation"])   # the candidate only chooses when the research could not tell
+    panelplan.allocate(ws, use_ai=bool(ws.research), size=size if not panelplan.research_size(ws) else None); return JsonResponse({"ok": True, "size": ws.panel.count()})
+
+@login_required
+@require_POST
+def ws_docs(request, pk):
+    """Add (or remove) one of the documents this interview expects. This is where candidates drop what the research said the process needs: never inside the interview."""
+    ws = mine(Workspace, request, pk); r = ws.research if isinstance(ws.research, dict) else {}
+    key = request.POST.get("key", ""); allowed = {d["key"] for d in agents.required_docs(ws)} | {"extra"}
+    if key not in allowed: return JsonResponse({"error": "That document is not on the list for this interview."}, status=400)
+    text = _read_doc(request.POST, request.FILES, "text", "file")[:DOC_TEXT_MAX]
+    d = dict(ws.documents or {})
+    if request.POST.get("remove"): d.pop("doc_" + key, None)
+    elif len(text.strip()) < 10: return JsonResponse({"error": "I could not read any text there. Paste the text, or upload a PDF, Word or text file."}, status=400)
+    else: d["doc_" + key] = text
+    ws.documents = d; ws.save(update_fields=["documents"]); got, miss = agents.doc_status(ws)
+    return JsonResponse({"ok": True, "have": got, "missing": miss})
 
 @login_required
 @require_POST
@@ -294,7 +339,40 @@ def ws_delete(request, pk): mine(Workspace, request, pk).delete(); return redire
 @login_required
 @require_POST
 def toggle_task(request, pk):
-    t = mine(PrepTask, request, pk); t.done = not t.done; t.save(); return JsonResponse({"done": t.done})
+    """Tick a task off (or undo it). Only a task that belongs to today can be completed: tasks for later days stay locked until their day."""
+    planner.reschedule_missed(request.user)
+    t = mine(PrepTask, request, pk); day = planner.today()
+    if not t.done and not planner.can_complete(t, day): return JsonResponse({"error": f"This task opens on {t.due:%A %d %B}. You can complete it that day."}, status=400)
+    if t.done and t.due != day: return JsonResponse({"error": "Only today's tasks can be changed."}, status=400)
+    t.done = not t.done; t.completed_at = timezone.now() if t.done else None; t.save(update_fields=["done", "completed_at"])
+    n = PrepTask.objects.filter(workspace=t.workspace); return JsonResponse({"done": t.done, "id": t.pk, "workspace_id": t.workspace_id, "done_count": n.filter(done=True).count(), "total": n.count(), "due_count": PrepTask.objects.filter(workspace__user=request.user, done=False, due__lte=day).count()})
+
+@login_required
+def notifications(request):
+    planner.reschedule_missed(request.user); return JsonResponse(planner.notifications(request.user))
+
+@login_required
+def calendar_page(request):
+    """A month grid of every task and interview date, with the chosen day's tasks beside it."""
+    import calendar as cal
+    planner.reschedule_missed(request.user); day = planner.today()
+    try: y, m = (int(x) for x in request.GET.get("m", "").split("-")); first = date(y, m, 1)
+    except (ValueError, TypeError): first = day.replace(day=1)
+    wsq = Workspace.objects.filter(user=request.user).order_by("-created"); wid = request.GET.get("w"); sel_ws = wsq.filter(pk=wid).first() if (wid or "").isdigit() else None
+    weeks = cal.Calendar(firstweekday=0).monthdatescalendar(first.year, first.month)
+    tq = PrepTask.objects.filter(workspace__user=request.user, due__gte=weeks[0][0], due__lte=weeks[-1][-1]).select_related("workspace")
+    if sel_ws: tq = tq.filter(workspace=sel_ws)
+    by = {}
+    for t in tq: by.setdefault(t.due, []).append(planner.card(t, day=day))
+    events = {}
+    for w in wsq.filter(general=False, date__gte=weeks[0][0], date__lte=weeks[-1][-1]):
+        if not sel_ws or sel_ws.pk == w.pk: events.setdefault(w.date, []).append({"title": w.title, "workspace_id": w.pk})
+    selected = date.fromisoformat(request.GET["d"]) if request.GET.get("d", "")[:4].isdigit() and len(request.GET["d"]) == 10 else (day if day.month == first.month and day.year == first.year else first)
+    grid = [[{"date": d, "iso": d.isoformat(), "in": d.month == first.month, "today": d == day, "tasks": by.get(d, []), "events": events.get(d, []), "more": max(0, len(by.get(d, [])) - 3)} for d in wk] for wk in weeks]
+    prev_m = (first - timedelta(days=1)).replace(day=1); next_m = (first + timedelta(days=32)).replace(day=1)
+    data = {d.isoformat(): {"tasks": by.get(d, []), "events": events.get(d, []), "label": f"{d:%A %d %B}"} for d in sorted(set(by) | set(events) | {selected})}
+    return render(request, "core/calendar.html", {"grid": grid, "first": first, "prev_m": f"{prev_m:%Y-%m}", "next_m": f"{next_m:%Y-%m}", "this_m": f"{day:%Y-%m}", "workspaces": wsq, "sel_ws": sel_ws,
+        "days_json": data, "selected": selected.isoformat(), "today": day.isoformat(), "weekdays": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]})
 
 # ---------- interview room ----------
 @login_required
@@ -311,7 +389,7 @@ def room(request, pk):
     s = mine(Session, request, pk); prof = agents.profile_of(request.user)
     if not s.workspace.panel.exists(): panelplan.allocate(s.workspace)   # ReadyWise, not the candidate, decides who is on the panel
     cands = agents.session_panel(s)
-    return render(request, "core/room.html", {"s": s, "ws": s.workspace, "panel": cands, "limit": LIMITS.get(s.mode, 0), "rec_lang": langs.code(prof.language), "lang": prof.language,
+    return render(request, "core/room.html", {"doc_list": agents.doc_checklist(s.workspace), "s": s, "ws": s.workspace, "panel": cands, "limit": LIMITS.get(s.mode, 0), "rec_lang": langs.code(prof.language), "lang": prof.language,
         "panel_json": json.dumps([_iv(i) for i in cands])})
 
 @login_required
@@ -331,7 +409,8 @@ def room_stt(request, pk):
     """Transcribe one recorded answer. The browser sends its own microphone audio; nothing is guessed if nothing was heard."""
     s = mine(Session, request, pk); f = request.FILES.get("audio")
     if not f: return JsonResponse({"error": "No audio was received."}, status=400)
-    ws = s.workspace; hint = f"Job interview answer. Role: {ws.position or ws.title}. Company: {ws.company}. " + (agents.profile_of(ws.user).skills or "")[:200]
+    ws = s.workspace   # vocabulary only: an instruction-like prompt ("Job interview answer. Role: ...") leaks into the transcript as words the candidate never said
+    hint = ", ".join(x for x in (ws.company, ws.position, (agents.profile_of(ws.user).skills or "")[:160]) if x)
     r = stt.transcribe(f.read(), f.content_type or "audio/webm", langs.code(agents.profile_of(ws.user).language), hint)
     return JsonResponse(r)
 
@@ -343,8 +422,13 @@ def room_turn(request, pk):
     if d.get("answer") is not None:
         tag = {"interrupted": "[interrupting the interviewer] ", "build": agents.BUILD_TAG, "cut_off": "[the panel stopped the candidate because the answer ran long] "}.get(d.get("tag"), "")
         if s.status != "open": return JsonResponse({"error": "This interview has ended."}, status=400)
-        Turn.objects.create(session=s, role="candidate", text=(tag + (d["answer"].strip() or "(no answer given)"))[:9000 if d.get("tag") == "build" else 3000], offset=elapsed)
+        cand = Turn.objects.create(session=s, role="candidate", text=(tag + (d["answer"].strip() or "(no answer given)"))[:9000 if d.get("tag") == "build" else 3000], offset=elapsed)
+        if d.get("tag") != "build" and factcheck.worth_checking(cand.text):   # the dedicated fact-check key looks up what was just claimed; the panel hears the result before its next question
+            lastq = s.turns.filter(role="interviewer").order_by("-id").first(); factcheck.start(cand, lastq.text if lastq else "")
     t, end, intro = agents.next_turn(s, elapsed)
+    if end:   # the interview is over: the evaluation starts now, while the closing words are still being spoken, so the report is ready almost at once
+        try: jobs.prefetch_evaluation(s.pk)
+        except Exception: pass
     return JsonResponse({"speaker": _iv(t.speaker), "text": t.text, "end": end, "intro": intro, "limit": LIMITS.get(s.mode, 0), "turn_id": t.id, "grounded": getattr(t, "grounded", None), "challenge": getattr(t, "challenge", None), "n": s.turns.filter(role="interviewer").count()})
 
 @login_required
@@ -397,6 +481,8 @@ def room_tts(request, pk):
     else:
         t = get_object_or_404(Turn, pk=d.get("turn_id"), session=s); iv, text = t.speaker, t.text
     if (agents.profile_of(s.workspace.user).language or "English") != "English": return JsonResponse({"error": "Voice audio is English only for now; your browser voice is used instead."}, status=400)
+    if isinstance(d.get("part"), int) and d["part"] >= 0:   # the browser asks for the reply piece by piece so the first sentence can play while the rest is made
+        wav, n = tts.synth_part(text, iv.voice_name, d["part"]); r = HttpResponse(wav, content_type="audio/wav"); r["X-Parts"] = str(n); r["Access-Control-Expose-Headers"] = "X-Parts"; return r
     return HttpResponse(tts.synth(text, iv.voice_name), content_type="audio/wav")
 
 @login_required
@@ -446,3 +532,68 @@ def interviewer_new(request):
             question_bank=P.get("question_bank", ""), rubric=P.get("rubric", ""), gender=P.get("gender", "m"), voice_name=P.get("voice_name") or ("hannah" if P.get("gender") == "f" else "daniel"), focus=",".join(P.getlist("focus")) or "communication")
         messages.success(request, "Interviewer created."); return redirect("interviewers")
     return render(request, "core/interviewer_new.html", {"avatars": AVATARS, "cats": CATS, "levels": LEVELS, "voices": logic.VOICES})
+
+
+# ---------- live voice (Gemini Live): the browser talks to Google directly with a one-session token; the server only mints it and keeps the transcript ----------
+@login_required
+@require_POST
+@ajax
+def room_live_token(request, pk):
+    s = mine(Session, request, pk)
+    if s.status != "open": return JsonResponse({"error": "This interview has ended."}, status=400)
+    if not live.enabled(): return JsonResponse({"error": "Live voice is not set up on this server."}, status=400)
+    try: return JsonResponse(live.mint(s))
+    except Exception: return JsonResponse({"error": "The live voice could not start."}, status=502)
+
+@login_required
+@require_POST
+@ajax
+def room_live_turns(request, pk):
+    """Saves what was said (from Gemini's transcription of the audio) as ordinary turns, so the existing evaluation and report work unchanged.
+    A hands-on submission arrives with build=true: it keeps its line breaks and carries the same tag the standard flow uses."""
+    s = mine(Session, request, pk)
+    if s.status != "open": return JsonResponse({"error": "This interview has ended."}, status=400)
+    try: d = json.loads(request.body or b"{}")
+    except ValueError: d = {}
+    lead = agents.session_panel(s)[0]; elapsed = int((timezone.now() - s.started_at).total_seconds()); saved = 0
+    for t in (d.get("turns") or [])[:20]:
+        if not isinstance(t, dict): continue
+        cand = t.get("role") == "candidate"; build = cand and bool(t.get("build"))
+        text = (agents.BUILD_TAG + str(t.get("text", "")).strip())[:9000] if build else " ".join(str(t.get("text", "")).split())[:3000]
+        if not text.strip() or text == agents.BUILD_TAG: continue
+        turn = Turn.objects.create(session=s, speaker=None if cand else lead, role="candidate" if cand else "interviewer", text=text, offset=elapsed); saved += 1
+        if cand and not build and factcheck.worth_checking(turn.text):
+            lastq = s.turns.filter(role="interviewer").order_by("-id").first()
+            try: factcheck.start(turn, lastq.text if lastq else "")
+            except Exception: pass
+    return JsonResponse({"ok": True, "saved": saved})
+
+@login_required
+@require_POST
+@ajax
+def room_live_facts(request, pk):
+    """Verified corrections the interviewer has not used yet, as a private note the browser passes to the live model when it is quiet. Each is handed over once."""
+    s = mine(Session, request, pk)
+    if s.status != "open": return JsonResponse({"text": ""})
+    pairs = factcheck.pending_for_panel(list(s.turns.order_by("id")))
+    if not pairs: return JsonResponse({"text": ""})
+    factcheck.mark_used(pairs)
+    return JsonResponse({"text": "PRIVATE NOTE FOR YOU ONLY (never mention research, sources or fact-checking to the candidate).\n" + agents.fact_block(pairs)
+                         + "\nChallenge the candidate directly, once, with the specific verified figure, in one or two sentences, as a natural follow-up. Do not apologise for raising it."})
+
+@login_required
+@require_POST
+@ajax
+def room_live_challenge(request, pk):
+    """The hands-on task, set by the same generator the standard interview uses, once the conversation is under way and enough time remains.
+    final=true means do not ask again (task set, not applicable to this role, or too late); final=false means try again later."""
+    s = mine(Session, request, pk)
+    if s.status != "open": return JsonResponse({"challenge": None, "final": True})
+    ws = s.workspace; remaining = ws.duration * 60 - int((timezone.now() - s.started_at).total_seconds())
+    if s.challenge or not agents.build_format(ws) or remaining <= 240: return JsonResponse({"challenge": None, "final": True})
+    if s.turns.filter(role="interviewer").count() < 4: return JsonResponse({"challenge": None, "final": False})
+    try: ch = agents.make_challenge(s)
+    except ai.AIError: ch = None
+    if not ch or not ch.get("brief"): return JsonResponse({"challenge": None, "final": False})
+    s.challenge = ch; s.save(update_fields=["challenge"])
+    return JsonResponse({"challenge": ch, "final": True})

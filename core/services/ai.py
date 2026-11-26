@@ -25,7 +25,8 @@ _rr = {"research": 0, "interview": 0}
 def _keys(purpose):
     """Research uses the research keys, everything live (interview, voices, evaluation, camera) uses the interview keys.
     Calls rotate round-robin across the keys of that group, and a key that hits its quota falls over to the next one."""
-    ks = list(settings.GROQ_RESEARCH_KEYS if purpose == "research" else settings.GROQ_INTERVIEW_KEYS)
+    if purpose == "factcheck": ks = list(dict.fromkeys(list(getattr(settings, "GROQ_FACTCHECK_KEYS", []) or []) + list(settings.GROQ_RESEARCH_KEYS)))   # one pool: a dedicated fact-check key (if any) and ALL the research keys, so many checks run side by side
+    else: ks = list(settings.GROQ_RESEARCH_KEYS if purpose == "research" else settings.GROQ_INTERVIEW_KEYS)
     pn = getattr(_ctx, "pin", None)
     if ks and pn is not None and purpose == "research": r = pn % len(ks); ks = ks[r:] + ks[:r]   # this block of research has its own key
     elif ks:
@@ -64,11 +65,13 @@ class gemini:
     def __enter__(self): self.old = getattr(_ctx, "gem", None); _ctx.gem = self.i; return self
     def __exit__(self, *a): _ctx.gem = self.old
 
-def _gemini_search(prompt, system, temperature):
-    """One web-grounded research step done by Gemini with its Google Search tool. Returns (text, sources) or raises AIError (the caller then falls back to Groq)."""
-    keys, models = list(getattr(settings, "BACKUP_AI_KEYS", [])), list(getattr(settings, "BACKUP_AI_MODELS", []))
+def _gemini_search(prompt, system, temperature, keys=None, models=None):
+    """One web-grounded research step done by Gemini with its Google Search tool. Returns (text, sources) or raises AIError (the caller then falls back to Groq).
+    keys/models default to the backup provider's; the fact checker passes its own."""
+    keys = list(keys) if keys is not None else list(getattr(settings, "BACKUP_AI_KEYS", []))
+    models = list(models) if models is not None else list(getattr(settings, "BACKUP_AI_MODELS", []))
     if not keys or not models: raise AIError("No Gemini key is set.")
-    k = keys[getattr(_ctx, "gem", 0) % len(keys)]; last = None
+    k = keys[(getattr(_ctx, "gem", None) or 0) % len(keys)]; last = None
     for model in models:
         body = {"contents": [{"role": "user", "parts": [{"text": prompt}]}], "tools": [{"google_search": {}}], "generationConfig": {"temperature": temperature}}
         if system: body["systemInstruction"] = {"parts": [{"text": system}]}
@@ -94,7 +97,7 @@ def _left():
 def current_wait(): return getattr(_ctx, "wait", None)   # so a thread pool can pass the patience on to its workers
 def _max_wait(wait=None): return wait if wait is not None else (getattr(_ctx, "wait", None) or MAX_WAIT)
 _cool = {}                                     # (key, model) -> time until which Groq said that key is rate limited for that model
-_gate = {"research": threading.BoundedSemaphore(8), "interview": threading.BoundedSemaphore(4)}   # at most this many requests in flight at once, whatever the number of threads
+_gate = {"research": threading.BoundedSemaphore(12), "interview": threading.BoundedSemaphore(4), "factcheck": threading.BoundedSemaphore(10)}   # at most this many requests in flight at once, whatever the number of threads
 
 def retry_seconds(text, default=8.0):
     """Groq says how long to wait: 'Please try again in 2.5s', '1m5.3s', '350ms' (or a retry-after header)."""
@@ -288,10 +291,26 @@ def search(prompt, system=None, temperature=0.3, purpose="research", wait=None):
         msg = _chat(settings.GROQ_MODELS, msgs, temperature, False, purpose)
     return msg.get("content") or "", _sources(msg)
 
+def factcheck_search(prompt, system=None, wait=8):
+    """Web-grounded lookup for the live fact checker. Groq browser search on the pooled keys goes first (quick, and every research key can work at once);
+    Gemini + Google Search is the fallback, or goes first when FACTCHECK_ENGINE=gemini. Returns (text, sources). Raises AIError when nothing answered in time."""
+    gk = list(getattr(settings, "FACTCHECK_GEMINI_KEYS", []) or [])
+    def gem(): return _gemini_search(prompt, system, 0.1, keys=gk, models=list(getattr(settings, "FACTCHECK_GEMINI_MODELS", []) or ["gemini-2.5-flash"]))
+    def groq():
+        msgs = ([{"role": "system", "content": system}] if system else []) + [{"role": "user", "content": prompt}]
+        msg = _chat(settings.GROQ_RESEARCH_MODELS, msgs, 0.1, False, "factcheck", wait=min(wait, 6), tools=[{"type": "browser_search"}], reasoning_effort="low")
+        return msg.get("content") or "", _sources(msg)
+    order = [gem, groq] if (gk and getattr(settings, "FACTCHECK_ENGINE", "groq") == "gemini") else [groq] + ([gem] if gk else [])
+    last = None
+    for f in order:
+        try: return f()
+        except AIError as e: last = e
+    raise last or AIError("The fact check could not be done.")
+
 _search = search  # call() has a parameter named `search`, so keep an alias to the function
 
-def call(prompt, system=None, json_mode=False, search=False, temperature=0.8, images=None, purpose="research", max_tokens=None, light=False, wait=None):
-    """Returns (text, sources). With search=True the answer is grounded by Groq's built-in web search and `sources` lists the pages used.
+def call(prompt, system=None, json_mode=False, search=False, temperature=0.8, images=None, purpose="research", max_tokens=None, light=False, wait=None, effort=None, models=None):
+    """Returns (text, sources). effort="low"|"medium"|"high" sets how long a reasoning model thinks (ignored by other model families): high for assessment decisions, low for routine turns. With search=True the answer is grounded by Groq's built-in web search and `sources` lists the pages used.
     light=True is for small quick jobs: the cheaper models are tried first. wait=N caps how long a rate limit may be waited out (N seconds)."""
     if search:
         text, sources = _search(prompt, system, temperature, purpose, wait)
@@ -306,8 +325,9 @@ def call(prompt, system=None, json_mode=False, search=False, temperature=0.8, im
         msgs.append({"role": "user", "content": content})
         return (_chat(settings.GROQ_VISION_MODELS, msgs, temperature, json_mode, purpose, wait=wait).get("content") or ""), []
     msgs.append({"role": "user", "content": prompt})
-    extra = {"max_completion_tokens": max_tokens} if max_tokens else {}   # reasoning models spend part of the budget thinking; a long JSON answer needs room or it is cut off mid-way
-    models = getattr(settings, "GROQ_LIGHT_MODELS", None) or settings.GROQ_MODELS if light else settings.GROQ_MODELS
+    extra = {"max_completion_tokens": max_tokens} if max_tokens else {}
+    if effort in ("low", "medium", "high"): extra["reasoning_effort"] = effort   # reasoning models spend part of the budget thinking; a long JSON answer needs room or it is cut off mid-way
+    models = list(models) if models else (getattr(settings, "GROQ_LIGHT_MODELS", None) or settings.GROQ_MODELS if light else settings.GROQ_MODELS)
     return (_chat(models, msgs, temperature, json_mode, purpose, wait=wait, **extra).get("content") or ""), []
 
 def repair_json(t):

@@ -1,6 +1,7 @@
 """Groq text-to-speech (Orpheus): one voice per interviewer. Returns WAV bytes.
 Orpheus accepts short inputs, so longer turns are split at sentence ends and the WAV pieces are joined."""
 import io, re, wave
+from concurrent.futures import ThreadPoolExecutor
 from django.conf import settings
 from . import ai
 
@@ -35,7 +36,37 @@ def join_wavs(parts):
             w.writeframes(r.readframes(r.getnframes()))
     w.close(); return buf.getvalue()
 
+def parts(text):
+    """The reply as pieces to speak: the first sentence alone (so the voice starts as soon as it is ready), then the rest in chunks. Order is kept."""
+    ch = chunks(text)
+    if not ch: return []
+    sents = re.split(r"(?<=[.!?])\s+", " ".join(text.split()), maxsplit=1)
+    if len(sents) == 2 and 12 <= len(sents[0]) <= MAX_CHARS: return [sents[0]] + chunks(sents[1])
+    return ch
+
+def _one(c, voice):
+    body = {"model": settings.GROQ_TTS_MODEL, "input": c, "voice": voice_for(voice), "response_format": "wav"}
+    try: wav = ai.request("/audio/speech", body, "interview", raw=True)
+    except ai.AIError as e:
+        if "terms" in str(e).lower(): raise ai.AIError("Groq needs you to accept the Orpheus voice terms once (console.groq.com, Playground, text-to-speech). " + str(e)[:150])
+        raise
+    if wav[:4] != b"RIFF": raise ai.AIError("Groq returned no audio.")
+    return wav
+
+def synth_part(text, voice, i):
+    """One piece of the reply as WAV, and how many pieces there are."""
+    ps = parts(text)
+    if not ps or i >= len(ps): raise ai.AIError("There is no such part of this reply.")
+    return _one(ps[i], voice), len(ps)
+
 def synth(text, voice, style=""):
+    ps = parts(text)
+    if not ps: raise ai.AIError("Groq returned no audio.")
+    if len(ps) == 1: return _one(ps[0], voice)
+    with ThreadPoolExecutor(min(4, len(ps))) as ex: wavs = list(ex.map(lambda c: _one(c, voice), ps))   # the pieces are made at the same time, not one after another
+    return join_wavs(wavs)
+
+def _old_synth(text, voice, style=""):
     parts = []
     for c in chunks(text):
         body = {"model": settings.GROQ_TTS_MODEL, "input": c, "voice": voice_for(voice), "response_format": "wav"}

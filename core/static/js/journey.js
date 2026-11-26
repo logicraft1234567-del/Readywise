@@ -6,7 +6,7 @@
   const REDUCE = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const panes = Object.fromEntries(order.map(id => [id, document.getElementById(id)]));
   const nodes = Object.fromEntries(order.map(id => [id, $(`.jn[data-id="${id}"]`)]));
-  const track = $(".jn-track"), fill = $(".jn-fill"), spark = $(".jn-spark"), foot = $("#ws-foot"), go = $("#ft-go"), lbl = $("#ft-lbl"), back = $("#ft-back"), mid = $("#ft-ln"), dots = $("#ft-dots");
+  const track = $(".jn-track"), fill = $(".jn-fill"), spark = $(".jn-spark"), foot = $("#ws-foot"), go = $("#ft-go"), back = $("#ft-back"), mid = $("#ft-ln"), dots = $("#ft-dots");
   let cur = null, flying = false;
   const anim = (el, f, o) => REDUCE ? { onfinish: null, finished: Promise.resolve() } : el.animate(f, Object.assign({ fill: "both", easing: "cubic-bezier(.2,.8,.2,1)" }, o));
   const idxOf = id => order.indexOf(id);
@@ -42,8 +42,9 @@
   }
   function updateBar(id) {
     const c = cta(id); const i = idxOf(id);
+    let lbl = $("#ft-lbl"); if (!lbl) { go.innerHTML = '<span class="lbl" id="ft-lbl"></span><span class="ar" aria-hidden="true">\u2192</span>'; lbl = $("#ft-lbl"); }
     if (lbl.textContent !== c.label) { go.classList.remove("swap"); void go.offsetWidth; go.classList.add("swap"); }
-    lbl.textContent = c.label; mid.textContent = `Step ${i + 1} of ${n}. ${c.mid}`; back.hidden = i === 0; go.onclick = e => { window.rwShatter && rwShatter(go, { event: e, restoreAfter: 950 }); setTimeout(() => c.run(go), 230); }; drawDots(id);
+    lbl.textContent = c.label; mid.textContent = `Step ${i + 1} of ${n}. ${c.mid}`; back.hidden = i === 0; go.onclick = e => { if (go.dataset.shattering) return; window.rwShatter && rwShatter(go, { event: e, restoreAfter: 950 }); setTimeout(() => c.run(go), 230); }; drawDots(id);
   }
   back.onclick = () => { const i = idxOf(cur); if (i > 0) show(order[i - 1]); };
 
@@ -56,17 +57,28 @@
     cur = id; moveSpark(idxOf(id), instant); updateBar(id); history.replaceState(null, "", "#" + id);
     foot.scrollIntoView && instant !== true && scrollTo({ top: 0, behavior: REDUCE ? "auto" : "smooth" });
   }
-  // a spark flies from one step's dot to the next, the dot pops, then the page moves on
+  // a spark flies from one step's dot to the next, the dot pops, then the page moves on.
+  // The spark follows the dots' LIVE positions every frame, so it lands on the target even while the page is still scrolling back to the top
+  // (it used to aim at where the dot was at the moment of the click, and missed it by hundreds of pixels).
+  const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2, centre = el => { const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
+  function settle(max) {   // resolves once the page has stopped scrolling, or after `max` ms
+    return new Promise(res => { const t0 = performance.now(); let last = -1, still = 0; (function f(now) { const y = window.scrollY; still = y === last ? still + 1 : 0; last = y; if (still >= 3 || now - t0 > max) res(); else requestAnimationFrame(f); })(t0); });
+  }
   function connect(from, to) {
     if (!to || flying) return show(to || from); const a = $(".jn-dot", nodes[from]), b = $(".jn-dot", nodes[to]);
     if (REDUCE || !a || !b) return show(to); flying = true; scrollTo({ top: 0, behavior: "smooth" });
-    setTimeout(() => {
-      const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(), f = document.createElement("i"); f.className = "fly"; document.body.append(f);
-      const x1 = ra.left + ra.width / 2, y1 = ra.top + ra.height / 2, x2 = rb.left + rb.width / 2, y2 = rb.top + rb.height / 2;
-      const an = f.animate([{ transform: `translate(${x1}px,${y1}px) scale(.6)` }, { transform: `translate(${(x1 + x2) / 2}px,${Math.min(y1, y2) - 46}px) scale(1.6)`, offset: .5 }, { transform: `translate(${x2}px,${y2}px) scale(.8)` }], { duration: 760, easing: "cubic-bezier(.5,0,.2,1)", fill: "forwards", });
-      f.style.left = "0"; f.style.top = "0"; setTimeout(() => show(to), 380);
-      an.onfinish = () => { f.remove(); nodes[to].classList.add("pop"); setTimeout(() => nodes[to].classList.remove("pop"), 950); flying = false; };
-    }, 260);
+    const guard = setTimeout(() => { flying = false; }, 4000);   // the lock can never stay on
+    settle(700).then(() => {
+      const f = document.createElement("i"); f.className = "fly"; let moved = false; const T0 = performance.now(), DUR = 760;
+      (function tick(now) {
+        const t = Math.min(1, Math.max(0, (now - T0) / DUR)), e = ease(t), [x1, y1] = centre(a), [x2, y2] = centre(b), arc = Math.sin(Math.PI * e);
+        f.style.transform = `translate(${x1 + (x2 - x1) * e}px,${y1 + (y2 - y1) * e - arc * 46}px) scale(${.6 + arc * 1.0 + e * .2})`;
+        if (!f.isConnected) document.body.append(f);
+        if (!moved && t > .5) { moved = true; show(to); }
+        if (t < 1) { requestAnimationFrame(tick); return; }
+        f.remove(); nodes[to].classList.add("pop"); setTimeout(() => nodes[to].classList.remove("pop"), 950); flying = false; clearTimeout(guard);
+      })(T0);
+    });
   }
   order.forEach(id => $(".jn-btn", nodes[id]).onclick = () => show(id));
 

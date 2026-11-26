@@ -26,19 +26,30 @@ YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "")  # optional: makes video
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")  # optional single fallback for everything
 GROQ_RESEARCH_KEYS = _env_keys("GROQ_RESEARCH_KEYS", "GROQ_RESEARCH_KEY")  # research, panel assignment, prep plans, CV analysis
 GROQ_INTERVIEW_KEYS = _env_keys("GROQ_INTERVIEW_KEYS", "GROQ_INTERVIEW_KEY")  # live interview, voices, evaluation, camera feedback
+# A dedicated key (or keys) that only ever checks facts during a live interview: it searches the web for what the candidate claims, and the panel is told the
+# real figure. Set FACTCHECK_GEMINI_KEYS (Google Search grounding, best) and/or GROQ_FACTCHECK_KEYS. If neither is set the research keys are used.
+GROQ_FACTCHECK_KEYS = _env_keys("GROQ_FACTCHECK_KEYS", "GROQ_FACTCHECK_KEY")   # optional: added to the research keys, not instead of them
+FACTCHECK_ENGINE = os.environ.get("FACTCHECK_ENGINE", "groq")   # groq = Groq browser search first (fast, uses every research key); gemini = Google grounding first
+FACTCHECK_GEMINI_KEYS = _env_keys("FACTCHECK_GEMINI_KEYS", "FACTCHECK_GEMINI_KEY")
+FACTCHECK_GEMINI_MODELS = [m.strip() for m in os.environ.get("FACTCHECK_GEMINI_MODELS", "gemini-2.5-flash,gemini-2.0-flash").split(",") if m.strip()]
+# Live voice interview (Gemini Live, audio in/audio out). Create the key at https://aistudio.google.com/apikey in a project WITHOUT billing so it stays on the free tier.
+LIVE_GEMINI_KEYS = _env_keys("LIVE_GEMINI_KEYS", "LIVE_GEMINI_KEY")
+LIVE_MODEL = os.environ.get("LIVE_MODEL", "gemini-3.8-live")
+FACTCHECK_SECONDS = float(os.environ.get("FACTCHECK_SECONDS", "2"))   # most the panel waits for the check before it asks its next question (a slower check is saved when it arrives and used on the turn after)
 def _models(name, default): return [m.strip() for m in os.environ.get(name, default).split(",") if m.strip()]
 # Groq limits tokens PER MODEL (and per organisation, so extra keys from the same account share them). Listing models from different
 # families gives the app several separate allowances to draw on: when one is used up the next answers straight away instead of waiting.
 # A model Groq has retired is skipped automatically, so extra names are harmless.
 _FALLBACKS = "llama-3.3-70b-versatile,llama-3.1-8b-instant,meta-llama/llama-4-scout-17b-16e-instruct,qwen/qwen3-32b,moonshotai/kimi-k2-instruct-0905"
 GROQ_MODELS = _models("GROQ_MODEL", "openai/gpt-oss-120b,openai/gpt-oss-20b," + _FALLBACKS)  # text and JSON; first available one is used
+GROQ_TURN_MODELS = _models("GROQ_TURN_MODEL", "openai/gpt-oss-20b,llama-3.3-70b-versatile,openai/gpt-oss-120b")   # optional: models for the live panel turns only. Empty = same as GROQ_MODEL. Put a faster one first (e.g. openai/gpt-oss-20b,openai/gpt-oss-120b) for quicker replies
 GROQ_LIGHT_MODELS = _models("GROQ_LIGHT_MODEL", "openai/gpt-oss-20b,llama-3.1-8b-instant,llama-3.3-70b-versatile,openai/gpt-oss-120b")  # small quick jobs (follow-up questions): cheap models first so the big ones keep their allowance
 GROQ_RESEARCH_MODELS = _models("GROQ_RESEARCH_MODEL", "openai/gpt-oss-120b,openai/gpt-oss-20b")  # models that support Groq's built-in browser_search tool
 # Backup provider, used only when every Groq model is rate limited. Any OpenAI-compatible service. Leave empty to turn it off.
 BACKUP_AI_BASE_URL = os.environ.get("BACKUP_AI_BASE_URL", "")
 BACKUP_AI_KEYS = _env_keys("BACKUP_AI_KEYS", "BACKUP_AI_KEY")
 BACKUP_AI_MODELS = _models("BACKUP_AI_MODELS", "")
-GROQ_STT_MODELS = _models("GROQ_STT_MODEL", "whisper-large-v3,whisper-large-v3-turbo")  # speech to text for the interview room
+GROQ_STT_MODELS = _models("GROQ_STT_MODEL", "whisper-large-v3-turbo,whisper-large-v3")  # speech to text for the interview room
 GROQ_VISION_MODELS = _models("GROQ_VISION_MODEL", "qwen/qwen3.8-27b,qwen/qwen3.6-27b")  # camera snapshots (must accept images)
 INSTALLED_APPS = ["django.contrib.admin","django.contrib.auth","django.contrib.contenttypes","django.contrib.sessions","django.contrib.messages","django.contrib.staticfiles","rest_framework","core"]
 MIDDLEWARE = ["django.middleware.security.SecurityMiddleware","whitenoise.middleware.WhiteNoiseMiddleware","django.contrib.sessions.middleware.SessionMiddleware","django.middleware.common.CommonMiddleware","django.middleware.csrf.CsrfViewMiddleware","django.contrib.auth.middleware.AuthenticationMiddleware","django.contrib.messages.middleware.MessageMiddleware"]
@@ -70,6 +81,7 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 200 * 1024 * 1024
 
 GROQ_TTS_MODEL = os.environ.get("GROQ_TTS_MODEL", "canopylabs/orpheus-v1-english")
 REDIS_URL = os.environ.get("REDIS_URL", "")
+FINISH_IN_THREAD = os.environ.get("FINISH_IN_THREAD", "1") == "1"   # evaluate in the background so Finish answers at once
 RESEARCH_IN_THREAD = os.environ.get("RESEARCH_IN_THREAD", "1") == "1"  # run research in a background thread so the page shows live progress (needs no Redis)
 CELERY_BROKER_URL = REDIS_URL or "memory://"; CELERY_ENABLED = bool(REDIS_URL)
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/"); SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", ""); SUPABASE_BUCKET = os.environ.get("SUPABASE_BUCKET", "recordings")
@@ -78,3 +90,8 @@ EMAIL_HOST = os.environ.get("EMAIL_HOST", ""); EMAIL_PORT = int(os.environ.get("
 EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", ""); EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "ReadyWise <noreply@readywise.local>")
 REST_FRAMEWORK = {"DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"], "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.SessionAuthentication"]}
+
+# Speed. The final evaluation thinks briefly by default (set EVAL_EFFORT=medium or high for a slower, deeper judgement). The panel's second look at its own assessment
+# (a whole extra model call) is off unless PANEL_RECHECK=1.
+EVAL_EFFORT = os.environ.get("EVAL_EFFORT", "low")
+PANEL_RECHECK = os.environ.get("PANEL_RECHECK", "0") == "1"

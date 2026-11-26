@@ -44,6 +44,7 @@ class Workspace(models.Model):
     researched_at = models.DateTimeField(null=True, blank=True)
     job_state = models.CharField(max_length=10, default="idle"); job_error = models.TextField(blank=True); job_progress = models.JSONField(default=dict, blank=True)
     research_cache = models.JSONField(default=dict, blank=True)   # notes of the research angles already finished, so a run that hit a rate limit resumes instead of starting over
+    docs_plan = models.JSONField(default=list, blank=True)   # documents the quick check in the new-interview flow found; the full research later adds to or replaces them
     details = models.JSONField(default=dict, blank=True); documents = models.JSONField(default=dict, blank=True); allocation = models.JSONField(default=dict, blank=True); known_interviewers = models.TextField(blank=True)
     created = models.DateTimeField(auto_now_add=True)
     def weights(self):
@@ -63,6 +64,9 @@ class PrepTask(models.Model):
     due = models.DateField(); title = models.CharField(max_length=160); detail = models.TextField(blank=True)
     category = models.CharField(max_length=20, default="technical"); kind = models.CharField(max_length=12, default="learn")
     done = models.BooleanField(default=False); priority = models.IntegerField(default=5); auto_added = models.BooleanField(default=False)
+    completed_at = models.DateTimeField(null=True, blank=True)   # when it was ticked off: drives the progress graphs
+    orig_due = models.DateField(null=True, blank=True)           # the day it was first planned for, set when a missed task is moved forward
+    query = models.CharField(max_length=160, blank=True, default="")        # a short search phrase for the "read" and "watch" links under the task
     class Meta: ordering = ["due", "-priority", "id"]
 
 class Session(models.Model):
@@ -74,6 +78,9 @@ class Session(models.Model):
     vision = models.JSONField(default=dict, blank=True); recording_url = models.CharField(max_length=400, blank=True)
     challenge = models.JSONField(default=dict, blank=True)  # the hands-on task the panel set in this session, if any
     panel_ids = models.JSONField(default=list, blank=True)  # interviewer ids the candidate chose for this session (1 to 3); empty = the workspace panel
+    agenda = models.JSONField(default=list, blank=True)     # the panel's shared plan: who covers which area, in what order, how many attempts were made
+    assessment = models.JSONField(default=dict, blank=True)  # the private assessment record: role rubric, evidence per competency, objectives done, a short log per answer (never shown to the candidate)
+    board = models.JSONField(default=dict, blank=True)      # what the panel has learned so far: claims, gaps, contradictions (shared by all interviewers)
 
 class Turn(models.Model):
     session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name="turns")
@@ -81,11 +88,16 @@ class Turn(models.Model):
     role = models.CharField(max_length=12, default="interviewer"); text = models.TextField()
     topic = models.CharField(max_length=120, blank=True); followup = models.BooleanField(default=False)
     offset = models.PositiveIntegerField(default=0); created = models.DateTimeField(auto_now_add=True)
+    factcheck = models.JSONField(default=dict, blank=True)  # online fact-check of this candidate answer: {"claims": [{claim, verdict, truth, source}]}
 
 class Evaluation(models.Model):
     session = models.OneToOneField(Session, on_delete=models.CASCADE, related_name="evaluation")
     scores = models.JSONField(default=dict); summary = models.TextField(blank=True)
     observations = models.JSONField(default=list); improvements = models.JSONField(default=list); strengths = models.JSONField(default=list)
+    competencies = models.JSONField(default=list, blank=True)   # per competency: rating, evidence, missing evidence, confidence, reason
+    unverified = models.JSONField(default=list, blank=True)     # claims the candidate made that nothing in the interview supported
+    overall = models.IntegerField(null=True, blank=True)       # the interview score out of 100
+    verdict = models.CharField(max_length=40, blank=True, default=""); checks = models.JSONField(default=list, blank=True)   # facts the candidate stated that the online check found wrong or unsupported
 
 class MemoryItem(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE); category = models.CharField(max_length=20)

@@ -139,3 +139,15 @@ textarea.wz-in{resize:none;min-height:7.4rem;line-height:1.5}
 .wz-read.busy::before{content:"";display:inline-block;width:12px;height:12px;margin-right:.5rem;border-radius:50%;border:2px solid var(--b1);border-right-color:transparent;vertical-align:-2px;animation:thinkSpin .8s linear infinite}
 .wz-read.ok{color:var(--ok)}.wz-read.bad{color:var(--bad)}
 .wz-field textarea.wz-in{max-height:260px}
+
+/* the quick document check */
+.wz-scan{display:grid;gap:.9rem;margin-top:.4rem}
+.wz-scan-s{display:flex;align-items:center;gap:.7rem;font-size:.95rem;color:var(--ink2)}
+.wz-scan-s.busy::before{content:"";flex:none;width:16px;height:16px;border-radius:50%;border:2px solid var(--line2);border-top-color:var(--b1);animation:wzspin .8s linear infinite}
+.wz-scan-s.ok{color:var(--ok);font-weight:500}
+@keyframes wzspin{to{transform:rotate(360deg)}}
+.wz-scan-l{display:grid;gap:.5rem}
+.wz-doc{display:grid;gap:.15rem;padding:.7rem .9rem;background:var(--surface);border:1px solid var(--line);border-radius:var(--r2)}
+.wz-doc b{font-weight:600;margin-right:.5rem}
+.wz-doc small{color:var(--mut);font-size:.84rem;line-height:1.45}
+@media(prefers-reduced-motion:reduce){.wz-scan-s.busy::before{animation:none}}

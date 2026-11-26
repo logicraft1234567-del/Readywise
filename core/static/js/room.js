@@ -6,7 +6,8 @@
 const $ = id => document.getElementById(id);
 let PANEL = [], stream = null, cap = null, rec = null, chunks = [], FRAMES = [], t0 = 0, clockT = null, answerTimer = null;
 let phase = "idle", token = 0, current = null, lastSpeaker = null, ending = false, interrupted = false, miss = 0, answerStart = 0, retryNext = false;
-let BENCH = null, benchEnd = 0, benchT = null, lastRun = null, ALLOW_INT = false, AUTO = true, PAUSE = 1800, muted = false, wantRec = false, qCount = 0, speechAudio = null;
+let camOff = false;
+let BENCH = null, benchEnd = 0, benchT = null, lastRun = null, ALLOW_INT = false, AUTO = true, PAUSE = 1000, muted = false, wantRec = false, qCount = 0, speechAudio = null;
 const SHORT = { retry: "I did not catch an answer. Please go ahead when you are ready." };
 const words = t => (t.toLowerCase().match(/[a-z0-9']+/g) || []);
 const icons = () => window.lucide && lucide.createIcons({ attrs: { "stroke-width": 1.75 } });
@@ -29,13 +30,13 @@ async function checkDevices() {
   if (stream.getVideoTracks().length) {
     $("pre").srcObject = stream; const s = stream.getVideoTracks()[0].getSettings(), w = s.width || 0;
     row("chk-cam", w >= 640 ? "ok" : "", "Camera: " + (w ? w + "x" + s.height : "working") + (w && w < 640 ? " (low quality: use better light)" : ""));
-    Vis.once($("pre")).then(r => { if (r !== null) row("chk-cam", r ? "ok" : "", $("chk-cam").textContent + (r ? ". Face found." : ". No face found: face the camera in good light.")); });
+    Vis.once($("pre")).then(r => { if (r !== null) row("chk-cam", r === true ? "ok" : "", $("chk-cam").textContent + (r === true ? ". Face found." : r === "dark" ? ". It is too dark to see you: turn on a light in front of you." : ". No face found yet: sit centred, with light on your face.")); });
   }
   let peak = 0;
   cap = new RWVoice.Capture(stream, {
     onLevel: l => { peak = Math.max(peak, l); $("meter") && ($("meter").style.width = Math.min(100, l * 260) + "%"); if (phase === "idle") $("mic-t").textContent = peak < .03 ? "Microphone: say a few words" : peak < .08 ? "Microphone: very quiet, move closer" : peak > .7 ? "Microphone: too loud, move back" : "Microphone: level is good"; if (phase === "answering" || phase === "speaking") levelLive(l); },
     onEnd: (blob, ms) => { if (phase === "idle") testSTT(blob); else if (phase === "answering") submitBlob(blob); },
-    onStart: () => { if (phase === "answering") { $("pip").classList.add("talking"); $("state").textContent = "Listening…"; } },
+    onStart: () => { if (phase === "answering") { $("pip").classList.add("talking"); $("mestate").textContent = "Speaking"; $("state").textContent = "Listening…"; } },
     onConfirm: () => { if (phase === "speaking" && ALLOW_INT) bargeIn(false); },
     onDiscard: () => { },
   });
@@ -52,25 +53,55 @@ async function testSTT(blob) {
 function levelLive(l) { $("micbtn").style.setProperty("--lv", Math.min(1, l * 5).toFixed(2)); }
 
 /* ---------- seeing the candidate: face, eye contact, expression (all in the browser) ---------- */
-const Vis={ready:false,loading:null,run:false,v:null,s:{n:0,present:0,look:0,away:0,expr:{}},cur:{present:false,look:false,expr:"neutral"},absentSince:0,awayCounted:false,nudgeAt:0,
+const Vis={ready:false,loading:null,run:false,v:null,s:{n:0,present:0,look:0,lookN:0,away:0,expr:{}},cur:{present:false,look:null,expr:"neutral"},lastSeen:0,absentSince:0,awayCounted:false,nudgeAt:0,cv:null,lum:128,base:null,cal:[],
  init(){if(this.loading)return this.loading;this.loading=(async()=>{try{for(let i=0;i<50&&!window.faceapi;i++)await new Promise(r=>setTimeout(r,100));if(!window.faceapi)return false;await Promise.all([faceapi.nets.tinyFaceDetector.loadFromUri(VMODEL),faceapi.nets.faceLandmark68TinyNet.loadFromUri(VMODEL),faceapi.nets.faceExpressionNet.loadFromUri(VMODEL)]);this.ready=true}catch(e){console.warn("Face tracking unavailable",e)}return this.ready})();return this.loading},
- async detect(video){const d=await faceapi.detectSingleFace(video,new faceapi.TinyFaceDetectorOptions({inputSize:224,scoreThreshold:.45})).withFaceLandmarks(true).withFaceExpressions();if(!d)return{present:false,look:false,expr:"neutral"};
-  const p=d.landmarks.positions,nose=p[30],le=p[36],re=p[45],chin=p[8],ed=Math.hypot(re.x-le.x,re.y-le.y)||1,yaw=(nose.x-(le.x+re.x)/2)/ed,my=(le.y+re.y)/2,pitch=(nose.y-my)/((chin.y-my)||1);
-  const top=Object.entries(d.expressions).sort((a,b)=>b[1]-a[1])[0];return{present:true,look:Math.abs(yaw)<.24&&pitch>.28&&pitch<.68,expr:top&&top[1]>.55?top[0]:"neutral"}},
- async once(video){if(!await this.init())return null;try{for(let i=0;i<6;i++){await new Promise(r=>setTimeout(r,500));if(!video.videoWidth)continue;const r=await this.detect(video);if(r.present)return true}return false}catch(e){return null}},
- async start(video){if(!await this.init()){$("vchip").textContent="Face tracking unavailable";return}this.v=video;this.run=true;this.tick()},
- async tick(){if(!this.run)return;const t0=performance.now();try{if(this.v.videoWidth){const r=await this.detect(this.v);this.cur=r;this.s.n++;if(r.present){this.s.present++;if(r.look)this.s.look++;this.s.expr[r.expr]=(this.s.expr[r.expr]||0)+1;this.absentSince=0;this.awayCounted=false}else{if(!this.absentSince)this.absentSince=Date.now();if(!this.awayCounted&&Date.now()-this.absentSince>3000){this.s.away++;this.awayCounted=true}}this.react()}}catch(e){}setTimeout(()=>this.tick(),Math.max(60,260-(performance.now()-t0)))},
- react(){const c=this.cur,chip=$("vchip"),gone=!c.present&&this.absentSince&&Date.now()-this.absentSince>2500;chip.className="chip"+(gone?" warn":"");chip.textContent=!c.present?(gone?"Not in view":"Looking for you…"):"In frame · "+(c.look?"facing screen":"looking away")+" · "+c.expr;
-  if(gone&&phase==="answering"&&Date.now()-this.absentSince>10000&&Date.now()-this.nudgeAt>40000){this.nudgeAt=Date.now();$("state").textContent="The panel can't see you. Please come back into the frame.";if(current)browserSay(current.speaker,"Are you still there?",()=>{})}},
- summary(){const s=this.s;if(!s.n)return null;const e={};for(const[k,v]of Object.entries(s.expr)){const pc=Math.round(100*v/Math.max(1,s.present));if(pc>=5)e[k]=pc}return{samples:s.n,present_pct:Math.round(1000*s.present/s.n)/10,eye_contact_pct:s.present?Math.round(1000*s.look/s.present)/10:0,away_events:s.away,expressions:e}},
+ /* One look at the camera. Detection and the finer measurements are separate: a face that is found always counts as "in frame", even when the landmarks fail. Dim rooms are brightened first, and a second, more sensitive pass runs before a face is declared missing. */
+ frame(video){const W=320,H=Math.round(320*video.videoHeight/video.videoWidth)||240,c=this.cv||(this.cv=document.createElement("canvas"));if(c.width!==W||c.height!==H){c.width=W;c.height=H}const x=c.getContext("2d",{willReadFrequently:true});x.filter="none";x.drawImage(video,0,0,W,H);
+  let lum=128;try{const d=x.getImageData(0,0,W,H).data;let t=0,n=0;for(let i=0;i<d.length;i+=64){t+=d[i]*.3+d[i+1]*.59+d[i+2]*.11;n++}lum=t/Math.max(1,n)}catch(e){}this.lum=lum;
+  if(lum<100&&"filter"in x){x.filter="brightness("+Math.min(2.4,115/Math.max(25,lum)).toFixed(2)+") contrast(1.2)";x.drawImage(video,0,0,W,H);x.filter="none"}return c},
+ async detect(video){const c=this.frame(video);
+  for(const o of[{inputSize:320,scoreThreshold:.3},{inputSize:416,scoreThreshold:.2}]){const opt=new faceapi.TinyFaceDetectorOptions(o);let d=null;
+   try{d=await faceapi.detectSingleFace(c,opt).withFaceLandmarks(true).withFaceExpressions()}catch(e){try{if(await faceapi.detectSingleFace(c,opt))return{present:true,look:null,expr:"neutral"}}catch(e2){}continue}
+   if(!d)continue;const p=d.landmarks.positions,nose=p[30],le=p[36],re=p[45],chin=p[8],ed=Math.hypot(re.x-le.x,re.y-le.y)||1,yaw=(nose.x-(le.x+re.x)/2)/ed,my=(le.y+re.y)/2,pitch=(nose.y-my)/((chin.y-my)||1);
+   const top=Object.entries(d.expressions).sort((a,b)=>b[1]-a[1])[0];return{present:true,yaw,pitch,look:this.facing(yaw,pitch),expr:top&&top[1]>.5?top[0]:"neutral"}}
+  return{present:false,look:null,expr:"neutral"}},
+ /* "Facing the screen" is measured against how THIS person sits, not against a fixed ideal: laptop cameras sit below the eyes and people read the screen from slightly off-centre. The first ~6 seconds set the baseline. */
+ facing(yaw,pitch){if(!this.base){this.cal.push([yaw,pitch]);if(this.cal.length>=24){const m=a=>a.slice().sort((x,y)=>x-y)[a.length>>1];this.base={yaw:m(this.cal.map(a=>a[0])),pitch:m(this.cal.map(a=>a[1]))}}return Math.abs(yaw)<.45&&pitch>.12&&pitch<.95}
+  return Math.abs(yaw-this.base.yaw)<.32&&Math.abs(pitch-this.base.pitch)<.24},
+ async once(video){if(!await this.init())return null;try{for(let i=0;i<10;i++){await new Promise(r=>setTimeout(r,400));if(!video.videoWidth||video.readyState<2)continue;const r=await this.detect(video);if(r.present)return true}return this.lum<45?"dark":false}catch(e){return null}},
+ async start(video){if(!await this.init()){$("vchip").textContent="Face tracking unavailable";return}this.v=video;this.run=true;this.lastSeen=Date.now();this.tick()},
+ async tick(){if(!this.run)return;const t0=performance.now();
+  try{if(this.v.videoWidth&&this.v.readyState>=2&&!document.hidden){const r=await this.detect(this.v),now=Date.now();
+    if(r.present)this.lastSeen=now;
+    const grace=now-this.lastSeen<3000,    /* a face seen in the last 3 seconds still counts: one missed frame, a blink or a glance down is not leaving the room */
+          shown=r.present||grace;this.cur=shown?{present:true,look:r.present?r.look:this.cur.look,expr:r.present?r.expr:this.cur.expr}:{present:false,look:null,expr:"neutral"};
+    this.s.n++;
+    if(shown){this.s.present++;this.absentSince=0;this.awayCounted=false;if(r.present){this.s.expr[r.expr]=(this.s.expr[r.expr]||0)+1;if(r.look!==null){this.s.lookN++;if(r.look)this.s.look++}}}
+    else{if(!this.absentSince)this.absentSince=this.lastSeen;if(!this.awayCounted&&now-this.absentSince>6000){this.s.away++;this.awayCounted=true}}
+    this.react()}
+  else if(document.hidden){this.lastSeen=Date.now()}}catch(e){}
+  setTimeout(()=>this.tick(),Math.max(80,300-(performance.now()-t0)))},
+ react(){const c=this.cur,chip=$("vchip"),gone=!c.present&&this.absentSince&&Date.now()-this.absentSince>4000,dark=this.lum<45;chip.className="chip"+(gone?" warn":"");
+  chip.textContent=!c.present?(gone?(dark?"Too dark to see you":"Not in view"):"Looking for you…"):"In frame"+(c.look===null?"":" · "+(c.look?"facing screen":"looking away"))+" · "+c.expr;
+  if(gone&&phase==="answering"&&Date.now()-this.absentSince>12000&&Date.now()-this.nudgeAt>45000){this.nudgeAt=Date.now();$("state").textContent="The panel can't see you. Please come back into the frame.";if(current)browserSay(current.speaker,"Are you still there?",()=>{})}},
+ summary(){const s=this.s;if(!s.n)return null;const e={};for(const[k,v]of Object.entries(s.expr)){const pc=Math.round(100*v/Math.max(1,s.present));if(pc>=5)e[k]=pc}return{samples:s.n,present_pct:Math.round(1000*s.present/s.n)/10,eye_contact_pct:s.lookN?Math.round(1000*s.look/s.lookN)/10:0,away_events:s.away,expressions:e}},
  stop(){this.run=false}};
 /* ---------- the stage ---------- */
 function buildStage() {
   const st = $("stage"); st.dataset.n = PANEL.length; st.innerHTML = "";
-  PANEL.forEach(p => { const d = document.createElement("div"); d.className = "rm-tile"; d.id = "tile" + p.id;
+  layoutSquares(); PANEL.forEach(p => { const d = document.createElement("div"); d.className = "rm-tile"; d.id = "tile" + p.id;
     d.innerHTML = `<img class="photo" src="${esc(p.image)}" alt=""><div class="rm-bars"><i></i><i></i><i></i><i></i><i></i></div><div class="rm-plate"><div class="who"><b>${esc(p.name)}</b><small>${esc(p.position)}</small></div><span class="rm-state">Listening</span></div>`;
     st.appendChild(d); });
 }
+/* Everyone in the room, the interviewers and you, sits in an equal square, like a video call. The size is the biggest square that fits all of them in the space available. */
+function layoutSquares() {
+  const a = document.querySelector(".rm-arena"); if (!a) return; const host = a.parentElement, cs = getComputedStyle(host);
+  const n = PANEL.length + 1, gap = 12, W = host.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight), H = a.clientHeight; if (W <= 0 || !H) return;
+  let best = 80, cols = n; for (let c = 1; c <= n; c++) { const r = Math.ceil(n / c), s = Math.min((W - gap * (c - 1)) / c, (H - gap * (r - 1)) / r); if (s > best + 1) { best = s; cols = c; } }
+  a.style.setProperty("--sq", Math.floor(Math.min(best, 440)) + "px"); a.style.setProperty("--cols", cols);   // the grid is exactly as wide as its columns, so the squares form clean rows
+}
+window.addEventListener("resize", layoutSquares);
+if (window.ResizeObserver) { const _a = document.querySelector(".rm-arena"); if (_a) { new ResizeObserver(layoutSquares).observe(_a); new ResizeObserver(layoutSquares).observe(_a.parentElement); } }
 function setSpeaker(id, label) {
   document.querySelectorAll(".rm-tile").forEach(t => { const on = id && t.id === "tile" + id; t.classList.toggle("on", !!on); if (!on) t.classList.remove("talking"); t.querySelector(".rm-state").textContent = on ? (label || "Speaking") : "Listening"; });
 }
@@ -93,25 +124,31 @@ function browserSay(p, text, cb) {
 }
 let actx = null;
 async function playVoice(p, body, text, fin) {
-  const my = ++token; let done = false; const end = () => { if (done || my !== token) return; done = true; fin(); };
+  const my = ++token; let done = false, started = false; const end = () => { if (done || my !== token) return; done = true; fin(); };
+  const getPart = async i => { const r = await fetch(`/room/${SID}/tts/`, { method: "POST", headers: { "X-CSRFToken": csrf(), "Content-Type": "application/json" }, body: JSON.stringify({ ...body, part: i }) }); if (!r.ok) throw 0; return { blob: await r.blob(), n: +(r.headers.get("X-Parts") || 1) }; };
+  const playBlob = blob => new Promise((res, rej) => {   // one piece of the reply, with the mouth-bars following the real audio
+    const a = new Audio(URL.createObjectURL(blob)); speechAudio = a; const an = actx.createAnalyser(); an.fftSize = 256; const b = new Uint8Array(an.fftSize); actx.createMediaElementSource(a).connect(an); an.connect(actx.destination);
+    a.onended = () => { bars(p.id, 0); res(); }; a.onerror = () => rej(new Error("audio")); a.play().catch(rej);
+    (function loop() { if (a.ended || a.paused) return; an.getByteTimeDomainData(b); let m = 0; for (const v of b) m = Math.max(m, Math.abs(v - 128) / 128); bars(p.id, m * 2); requestAnimationFrame(loop); })();
+  });
   try {
     if (NON_EN) throw 0;
-    const r = await fetch(`/room/${SID}/tts/`, { method: "POST", headers: { "X-CSRFToken": csrf(), "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    if (!r.ok) throw 0; const blob = await r.blob(); if (my !== token) return;
-    phase = "speaking"; setSpeaker(p.id); if (cap && ALLOW_INT) cap.open("watch");
-    const a = new Audio(URL.createObjectURL(blob)); speechAudio = a; actx = actx || new AudioContext(); await actx.resume();
-    const an = actx.createAnalyser(); an.fftSize = 256; const b = new Uint8Array(an.fftSize); actx.createMediaElementSource(a).connect(an); an.connect(actx.destination);
-    a.onended = () => { bars(p.id, 0); end(); }; await a.play();
-    (function loop() { if (a.ended || a.paused) return; an.getByteTimeDomainData(b); let m = 0; for (const v of b) m = Math.max(m, Math.abs(v - 128) / 128); bars(p.id, m * 2); requestAnimationFrame(loop); })();
+    const first = await getPart(0); if (my !== token) return;   // the first sentence arrives on its own, so the voice starts at once
+    const rest = []; for (let i = 1; i < Math.max(1, first.n); i++) rest.push(getPart(i).catch(() => null));   // the other pieces are being made while the first one plays
+    phase = "speaking"; setSpeaker(p.id); if (cap && ALLOW_INT) cap.open("watch"); actx = actx || new AudioContext(); await actx.resume(); started = true;
+    await playBlob(first.blob);
+    for (const pr of rest) { if (my !== token) return; const r = await pr; if (!r || my !== token) break; await playBlob(r.blob); }
+    end();
   } catch (e) {
-    if (my !== token) return; phase = "speaking"; setSpeaker(p.id); if (cap && ALLOW_INT) cap.open("watch"); browserSay(p, text, end);
+    if (my !== token) return; if (started) { end(); return; }   // a later piece failed: never say the first part twice
+    phase = "speaking"; setSpeaker(p.id); if (cap && ALLOW_INT) cap.open("watch"); browserSay(p, text, end);
   }
 }
 function stopSpeech() { token++; try { speechSynthesis.cancel(); } catch (e) { } if (speechAudio) { try { speechAudio.pause(); } catch (e) { } speechAudio = null; } document.querySelectorAll(".rm-tile").forEach(t => t.classList.remove("talking")); }
 
 /* ---------- the conversation ---------- */
 async function next(answer, tag) {
-  phase = "thinking"; setState("The panel is thinking…"); setSpeaker(null); $("send").disabled = true; $("pip").classList.remove("talking");
+  phase = "thinking"; setState("The panel is thinking…"); setSpeaker(null); $("send").disabled = true; $("pip").classList.remove("talking"); $("mestate").textContent = "Ready";
   try {
     const d = await post(`/room/${SID}/turn/`, { answer, tag }); retryNext = false; current = d; lastSpeaker = d.speaker; qCount = d.n; progress(d);
     logMsg(d.speaker.name + ", " + d.speaker.position, d.text, "i"); caption(d.text); setSpeaker(d.speaker.id); setState(d.speaker.name + " is speaking" + (ALLOW_INT && cap ? " (start talking to interrupt)" : ""));
@@ -141,7 +178,7 @@ function sendTyped() {
   $("typed").value = ""; phase = "thinking"; logMsg("You", t, "c"); caption(t, true); const tg = interrupted ? "interrupted" : undefined; interrupted = false; miss = 0; next(t, tg);
 }
 async function submitBlob(blob) {
-  if (phase !== "answering") return; phase = "transcribing"; $("pip").classList.remove("talking"); clearInterval(answerTimer); $("limitbox").textContent = "";
+  if (phase !== "answering") return; phase = "transcribing"; $("pip").classList.remove("talking"); $("mestate").textContent = "Ready"; clearInterval(answerTimer); $("limitbox").textContent = "";
   if (!blob || blob.size < 1500) return noSpeech();
   setState("Transcribing what you said…"); const pend = logMsg("You", "Transcribing…", "c pend");
   try {
@@ -167,6 +204,17 @@ function toggleMute() {
   muted = !muted; if (stream) stream.getAudioTracks().forEach(t => t.enabled = !muted); if (cap) cap.muted = muted;
   const b = $("micbtn"); b.classList.toggle("muted", muted); b.setAttribute("aria-label", muted ? "Unmute microphone" : "Mute microphone"); b.innerHTML = `<i data-lucide="${muted ? "mic-off" : "mic"}" width="18"></i><span>${muted ? "Unmute" : "Mute"}</span>`; icons();
   if (muted) $("typebox").classList.add("show");
+}
+function toggleCam() {
+  const vt = stream ? stream.getVideoTracks() : [];
+  if (!vt.length) { toast("No camera is connected."); return; }
+  camOff = !camOff; vt.forEach(t => t.enabled = !camOff);
+  $("pip").classList.toggle("nocam", camOff);
+  const b = $("cambtn"); b.classList.toggle("off", camOff); b.setAttribute("aria-pressed", String(camOff));
+  b.setAttribute("aria-label", camOff ? "Turn camera on" : "Turn camera off"); b.title = camOff ? "Turn camera on" : "Turn camera off";
+  b.innerHTML = `<i data-lucide="${camOff ? "video-off" : "video"}" width="18"></i><span>Camera</span>`; icons();
+  if (camOff) { Vis.stop(); $("vchip").textContent = "Camera off"; }   // a switched-off camera sends black frames: do not read them as "not in view"
+  else if ($("vtrack").checked) Vis.start($("me"));
 }
 function toggleType() { $("typebox").classList.toggle("show"); if ($("typebox").classList.contains("show")) $("typed").focus(); }
 $("typed").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendTyped(); } });
@@ -197,14 +245,15 @@ async function runChecks() {
 }
 async function submitBuild() {
   if (!BENCH) return; const code = $("b-code").value.trim(); if (code.length < 5) { toast("Write something first."); return; }
-  if (phase === "speaking") stopSpeech(); if (phase !== "answering" && phase !== "speaking" && phase !== "error") { toast("Wait for the panel to finish speaking."); return; }
+  const LV = typeof Live !== "undefined" && Live.active;   // live voice mode: the conversation never stops, so there is no turn to wait for
+  if (!LV) { if (phase === "speaking") stopSpeech(); if (phase !== "answering" && phase !== "speaking" && phase !== "error") { toast("Wait for the panel to finish speaking."); return; } }
   clearInterval(answerTimer); clearInterval(benchT); if (cap) { try { await cap.close(); } catch (e) { } }
   if ($("b-lang").value === "javascript" && BENCH.format === "code" && BENCH.tests.length && !lastRun) await runChecks();
   const lang = BENCH.format === "code" ? $("b-lang").selectedOptions[0].textContent.split(" ")[0] : "written";
   const checks = lastRun && !lastRun.fatal ? `Automatic checks (run in the candidate's browser): ${lastRun.n} of ${lastRun.total} passed.` + (lastRun.fails.length ? " Failed: " + lastRun.fails.map(x => "solve(" + x.args.map(show).join(", ") + ") expected " + show(x.expected) + (x.err ? " but threw " + x.err : " got " + show(x.got))).join("; ") : "") : lastRun && lastRun.fatal ? "Automatic checks could not run: " + lastRun.fatal : "Automatic checks were not run.";
   const text = `Task: ${BENCH.title}\nFormat: ${lang}\n${checks}\n\n${code}`.slice(0, 8500);
   logMsg("You, submitted solution (" + lang + ")", code.length > 400 ? code.slice(0, 400) + "…" : code, "c"); BENCH = null; $("live").classList.remove("build"); caption("Thanks, let me look at that.", false);
-  phase = "thinking"; miss = 0; interrupted = false; next(text, "build");
+  if (LV) { Live.submit(text); return; } phase = "thinking"; miss = 0; interrupted = false; next(text, "build");
 }
 
 /* ---------- start and finish ---------- */
@@ -218,17 +267,21 @@ async function begin() {
   if (!stream && !cap) await checkDevices();
   ALLOW_INT = $("allowint").checked && !!cap; AUTO = $("autosend").checked; PAUSE = +$("pause").value; wantRec = $("consent").checked && !!stream;
   $("setup").classList.add("hidden"); $("live").classList.remove("hidden"); buildStage(); setState("Your panel is joining…");
-  if (stream && stream.getVideoTracks().length) { $("me").srcObject = stream; if ($("vtrack").checked) Vis.start($("me")); else $("vchip").textContent = "Face tracking off"; } else $("pip").style.display = "none";
+  if (stream && stream.getVideoTracks().length) { $("me").srcObject = stream; if ($("vtrack").checked) Vis.start($("me")); else $("vchip").textContent = "Face tracking off"; } else $("pip").classList.add("nocam");
   if (wantRec && window.MediaRecorder) { rec = new MediaRecorder(stream); rec.ondataavailable = e => e.data.size && chunks.push(e.data); rec.start(1000); }
-  if ($("vconsent").checked && stream && stream.getVideoTracks().length) { const cv = document.createElement("canvas"), snap = () => { const v = $("me"); if (FRAMES.length >= 5 || !v.videoWidth) return; cv.width = 320; cv.height = Math.round(320 * v.videoHeight / v.videoWidth); cv.getContext("2d").drawImage(v, 0, 0, cv.width, cv.height); FRAMES.push(cv.toDataURL("image/jpeg", .6).split(",")[1]); }; setTimeout(snap, 8000); setInterval(snap, 40000); }
+  if ($("vconsent").checked && stream && stream.getVideoTracks().length) { const cv = document.createElement("canvas"), snap = () => { const v = $("me"); if (camOff || FRAMES.length >= 5 || !v.videoWidth) return; cv.width = 320; cv.height = Math.round(320 * v.videoHeight / v.videoWidth); cv.getContext("2d").drawImage(v, 0, 0, cv.width, cv.height); FRAMES.push(cv.toDataURL("image/jpeg", .6).split(",")[1]); }; setTimeout(snap, 8000); setInterval(snap, 40000); }
   if (cap) cap.close();  // the setup test window is done
-  rwCountdown({ title: "Interview starting", sub: "Your panel is joining the room. Take a breath.", onDone: () => { t0 = Date.now(); clockT = setInterval(() => { const s = Math.floor((Date.now() - t0) / 1000); $("clock").textContent = String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); }, 1000); speechSynthesis.getVoices(); next(null); } });
+  rwCountdown({ title: "Interview starting", sub: "Your panel is joining the room. Take a breath.", onDone: () => { t0 = Date.now(); clockT = setInterval(() => { const s = Math.floor((Date.now() - t0) / 1000); $("clock").textContent = String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); }, 1000); speechSynthesis.getVoices(); Live.tryStart().then(ok => { if (!ok) next(null); }); } });
 }
 async function finish() {
-  if (ending) return; ending = true; phase = "idle"; Vis.stop(); stopSpeech(); clearInterval(answerTimer); clearInterval(clockT); setState("Evaluating your interview…");
+  if (ending) return; ending = true; phase = "idle"; Vis.stop(); if (typeof Live !== "undefined" && Live.active) await Live.stop(); stopSpeech(); clearInterval(answerTimer); clearInterval(clockT); setState("Evaluating your interview…");
   if (cap) { try { await cap.close(); } catch (e) { } cap.destroy(); }
   const stop = new Promise(r => { if (rec && rec.state !== "inactive") { rec.onstop = r; rec.stop(); } else r(); }); await stop;
-  if (chunks.length) { const f = new FormData(); f.append("rec", new Blob(chunks, { type: "video/webm" }), "session.webm"); try { await post(`/room/${SID}/recording/`, f, true); } catch (e) { } }
+  let upload = Promise.resolve();   // the recording uploads while the evaluation runs; the report opens as soon as both are done (the upload is waited for at most 6 s more)
+  if (chunks.length) { const f = new FormData(); f.append("rec", new Blob(chunks, { type: "video/webm" }), "session.webm"); upload = post(`/room/${SID}/recording/`, f, true).catch(() => { }); }
   if (stream) stream.getTracks().forEach(t => t.stop());
-  try { const d = await post(`/room/${SID}/finish/`, { frames: FRAMES, camera: Vis.summary() }); if (d.job) await pollJob(d.job, d.url); else location.href = d.url; } catch (e) { toast(e.message, true); ending = false; }
+  try {
+    const d = await post(`/room/${SID}/finish/`, { frames: FRAMES, camera: Vis.summary() });
+    if (d.job) await pollJob(d.job, () => { }, 350); await Promise.race([upload, new Promise(r => setTimeout(r, 3000))]); location.href = d.url;
+  } catch (e) { toast(e.message, true); ending = false; }
 }

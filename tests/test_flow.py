@@ -19,7 +19,9 @@ def fake(prompt, system=None, json_mode=False, search=False, temperature=0.8, im
             "likely_questions":[{"q":"Why us?","why":"motivation","strong":"specific reasons"}],"questions_to_ask":["Q?"]}), []
     if "preparation programme" in prompt:
         return json.dumps({"tasks":[{"day":1,"title":"T1","detail":"d","category":"technical","kind":"learn"}]}), []
-    if "Panel Orchestrator" in prompt:
+    if "at the start of a REAL interview" in prompt: return json.dumps({"text": "Good morning. I am the interviewer. Please tell me why you are here."}), []
+    if "You chair the briefing" in prompt: return json.dumps({"items": []}), []
+    if "Panel Orchestrator" in prompt or "You run a REAL interview" in prompt:
         ids = re.findall(r"id=(\d+) ", prompt)
         return json.dumps({"speaker_id": int(ids[0]), "text": "Tell me about yourself.", "topic": "intro", "followup": False, "end": "CLOSING" in prompt}), []
     if "presentation coach" in prompt: return json.dumps({"observations":["Good lighting"],"tips":["Raise the camera"]}), []
@@ -332,9 +334,10 @@ def test_new_interview_wizard_config_has_every_type_one_question_at_a_time(clien
     assert set(cfg["kinds"]) == set(kinds.ORDER) and cfg["head"][1]["type"] == "kind" and cfg["tail"][-1]["name"] == "duration" and cfg["startAfterKind"] is False
     pitch = cfg["kinds"]["pitch"]["steps"]; names = [x["name"] for x in pitch]
     assert names[:2] == ["pitch__company", "pitch__position"] and "pitch__problem" in names and "pitch__jd" in names and "pitch__raising" in names
-    req = [x["id"] for x in pitch if x.get("req")]; assert req == ["company", "position", "problem", "deck", "raising"]  # only the essentials cannot be skipped (the pitch deck is the required document of a pitch)
+    req = [x["id"] for x in pitch if x.get("req")]; assert req == ["company", "position", "problem", "raising"]  # only the essentials cannot be skipped
+    assert [x["id"] for x in cfg["kinds"]["pitch"]["docSteps"] if x.get("req")] == ["deck"]            # the pitch deck is the required document of a pitch, asked in the last part
     assert cfg["kinds"]["pitch"]["steps"][0]["q"] == "What's your startup name?" and cfg["kinds"]["startup"]["steps"][0]["q"] == "What's the startup name?"
-    assert [x["chapter"] for x in pitch][0] == "The opportunity" and "The interview" in {x["chapter"] for x in pitch}
+    assert [x["chapter"] for x in pitch][0] == "Your application" and "The interview" in {x["chapter"] for x in pitch} and "Why you chose it" in {x["chapter"] for x in pitch}
     assert 'id="wz-cfg"' in html and 'name="jd"' in html and 'id="wz-form"' in html and "pitch__company" in html
     assert client_in.get("/w/new/?kind=visa").context["cfg"]["startAfterKind"] is True
 

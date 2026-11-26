@@ -128,3 +128,46 @@ body.in-room .side,body.in-room .hdr,body.in-room .skip,body.in-room .toast{disp
 body.in-room .app,body.in-room .main,body.in-room .page{display:block;padding:0;margin:0;max-width:none;width:100%}
 body.in-room .rm{position:fixed;inset:0;z-index:300;border:0;border-radius:0;box-shadow:none;width:100vw;height:100dvh}
 body.in-room .rm-live{height:100dvh;min-height:0}
+
+/* ---------- video-call layout: every participant in an equal square, glass controls docked at the bottom (like Meet and Zoom) ---------- */
+.rm-live{grid-template-columns:minmax(0,1fr) 340px;position:relative;isolation:isolate}
+.rm-live::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
+  background:radial-gradient(42% 36% at 18% 92%,color-mix(in srgb,var(--b1) 26%,transparent),transparent 70%),radial-gradient(36% 32% at 86% 88%,color-mix(in srgb,var(--lamp) 18%,transparent),transparent 70%),radial-gradient(30% 28% at 55% 10%,color-mix(in srgb,var(--b1) 10%,transparent),transparent 70%)}
+.rm-stagecol{padding-bottom:.8rem}
+.rm-arena{flex:1;min-height:0;display:flex;flex-wrap:wrap;justify-content:center;align-content:center;gap:12px}
+.rm-stage{display:contents}
+.rm-tile,.rm-me-pip{flex:none!important;width:var(--sq,220px);height:var(--sq,220px);aspect-ratio:1/1;border-radius:20px}
+.rm-stage[data-n] .rm-tile.on,.rm-stage[data-n="2"] .rm-tile.on,.rm-stage[data-n="3"] .rm-tile.on{flex-grow:0}
+.rm-stage[data-n="3"] .rm-tile:not(.on){filter:none}
+.rm-tile.on{border-color:var(--lamp);box-shadow:0 0 0 3px color-mix(in srgb,var(--lamp) 70%,transparent),0 18px 50px rgba(22,32,58,.22)}
+.rm-me-pip.talking{border-color:var(--lamp);box-shadow:0 0 0 3px color-mix(in srgb,var(--lamp) 70%,transparent)}
+.rm-me-pip .rm-plate{display:flex;justify-content:space-between;align-items:flex-end}
+.rm-nocam{display:none;position:absolute;inset:0;flex-direction:column;align-items:center;justify-content:center;gap:.4rem;color:var(--mut);font-size:.8rem;background:linear-gradient(180deg,var(--wall1),var(--wall2))}
+.rm-me-pip.nocam .rm-nocam{display:flex}.rm-me-pip.nocam video{display:none}
+
+.rm-ctl{display:flex;flex-direction:row;justify-content:center;align-items:center;flex-wrap:wrap;gap:.55rem;width:fit-content;max-width:100%;margin:.2rem auto 0;padding:.55rem .65rem;overflow:visible;min-height:0;
+  border-radius:28px;background:color-mix(in srgb,var(--surface) 34%,transparent);border:1px solid color-mix(in srgb,#fff 30%,transparent);
+  -webkit-backdrop-filter:blur(22px) saturate(170%);backdrop-filter:blur(22px) saturate(170%);
+  box-shadow:0 12px 40px rgba(10,20,40,.22),inset 0 1px 0 rgba(255,255,255,.4),inset 0 -1px 0 rgba(255,255,255,.08)}
+.rm-ctl .rm-btn{flex-direction:column;justify-content:center;text-align:center;gap:.22rem;width:auto;min-width:66px;padding:.6rem .85rem;border-radius:20px;font-size:.68rem;line-height:1;
+  background:color-mix(in srgb,#fff 16%,transparent);border:1px solid color-mix(in srgb,#fff 26%,transparent);color:var(--ink);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);box-shadow:inset 0 1px 0 rgba(255,255,255,.35)}
+.rm-ctl .rm-btn span{display:block;white-space:nowrap}
+.rm-ctl .rm-btn:hover{background:color-mix(in srgb,#fff 28%,transparent)}
+.rm-ctl .rm-btn.go{background:color-mix(in srgb,var(--b1) 78%,transparent);color:var(--on-b1);border-color:color-mix(in srgb,var(--b1) 55%,#fff 25%)}
+.rm-ctl .rm-btn.go:hover{background:color-mix(in srgb,var(--b1) 90%,transparent)}
+.rm-ctl .rm-btn.end{margin:0 0 0 .5rem;background:color-mix(in srgb,var(--bad) 82%,transparent);color:#fff;border-color:color-mix(in srgb,var(--bad) 55%,#fff 28%)}
+.rm-ctl .rm-btn.end:hover{background:var(--bad)}
+.rm-ctl .rm-mic.muted{background:color-mix(in srgb,var(--bad) 30%,transparent);border-color:color-mix(in srgb,var(--bad) 60%,transparent)}
+.rm-ctl .rm-mic::after{border-radius:22px;inset:-3px}
+.rm-ctl .rm-toggle-log{display:none}
+@media (max-width:900px){
+  .rm-live{grid-template-columns:minmax(0,1fr)}
+  .rm-arena{flex-direction:row;gap:8px}.rm-me-pip{flex:none}
+  .rm-stage[data-n="2"],.rm-stage[data-n="3"]{flex-direction:row}
+  .rm-ctl{padding:.45rem .5rem;gap:.4rem;border-radius:24px}.rm-ctl .rm-btn{min-width:48px;padding:.65rem;border-radius:50%}.rm-ctl .rm-btn span{display:none}.rm-ctl .rm-btn.end{margin-left:.2rem}
+  .rm-ctl .rm-toggle-log{display:inline-flex}
+}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){.rm-ctl{background:color-mix(in srgb,var(--surface) 88%,transparent)}}
+.rm-arena{width:calc(var(--cols,4) * var(--sq,220px) + (var(--cols,4) - 1) * 12px);max-width:100%;margin-inline:auto;flex:1 1 0}
+@media (max-width:900px){.rm-arena{width:calc(var(--cols,4) * var(--sq,160px) + (var(--cols,4) - 1) * 8px)}}

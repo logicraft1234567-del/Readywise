@@ -298,6 +298,7 @@ PROFILES = {
  "certification": dict(label="Certification", icon="badge-check", blurb="Technical and competency assessments", company_label="Certifying body", position_label="Certification name",
    doc_label="Exam guide or syllabus", duration=30, format="Oral or scenario-based exam", base="standard", panel=["Alex", "David"],
    fields=[F("level", "Level", "Level", "select", opts="Foundation|Associate|Professional|Expert", sec=OPP),
+           F("motive", "Why this exam", "Why this certification, and why now?", "textarea", "e.g. I want to move from support into cloud engineering and employers keep asking for it"),
            F("format", "Exam format", "Exam format", "select", opts="Oral exam|Scenario-based|Mixed|Not sure", sec=OPP),
            F("topics", "Domains", "Exam domains or topics (from the exam guide)", "textarea", sec=OPP),
            F("experience", "Hands-on experience", "Hands-on experience you already have", "text", "e.g. 2 years administering AWS in production"),
@@ -361,3 +362,23 @@ EVIDENCE_STEPS = ["Experiences and reviews from people who did this", "Interview
 def research_steps(kind):
     """Labels shown while researching: the type's own angles, then forums and videos, then the two closing steps every type has."""
     return [p["label"] for p in profile(kind)["plan"]] + EVIDENCE_STEPS + ["Writing your briefing", "Choosing your interviewers"]
+
+
+# The new-interview flow asks in three parts: your application, why you chose it, then your documents.
+# These are the questions that belong to the second part (the reasons), in the order they are asked.
+WHY_KEYS = {"startup": ["why"], "employment": ["why"], "internship": ["why"], "graduate": ["sector"], "admission": ["statement", "whyuni"],
+            "scholarship": ["goal", "why"], "visa": ["purpose", "ties"], "fellowship": ["fit"], "pitch": ["team"], "certification": ["motive"]}
+
+# If the quick document check cannot reach the web or the AI, these are asked instead (the main document, such as the CV, is asked separately).
+DEFAULT_DOCS = {
+    "startup": [("job_post", "Job post or startup one-pager", "The panel reads what the role really asks for.", True), ("portfolio", "Portfolio, GitHub or project write-up", "Founders look for something you built.", False)],
+    "employment": [("job_ad", "Job description", "Questions follow the requirements in the ad.", True), ("references", "Reference list or recommendation letters", "Some employers ask for them at final stage.", False)],
+    "internship": [("posting", "Internship posting", "The panel tests the skills the posting lists.", True), ("transcript", "Academic transcript", "Many internships ask for your grades.", False)],
+    "graduate": [("brochure", "Programme brochure or job ad", "Shows the competencies they assess.", True), ("transcript", "Degree transcript or predicted results", "Graduate schemes check your classification.", True)],
+    "admission": [("statement", "Personal statement", "Admissions panels question what you wrote.", True), ("transcript", "Academic transcript", "They ask about your grades and subjects.", True), ("references", "Reference letters", "Often discussed at interview.", False)],
+    "scholarship": [("essay", "Scholarship essay or personal statement", "Panels question what you wrote.", True), ("admission_letter", "Admission or offer letter", "Shows where you will study.", False), ("references", "Reference letters", "Referees are often named in the interview.", False)],
+    "visa": [("admission_letter", "Admission or invitation letter", "The officer checks why you are travelling.", True), ("funds", "Proof of funds or sponsor letter", "Funding is checked closely.", True), ("ties", "Proof of ties to your home country", "Job letter, property or family ties.", True)],
+    "fellowship": [("proposal", "Research proposal", "The panel questions your project.", True), ("references", "Reference letters", "Referees are often named.", False)],
+    "pitch": [("financials", "Financial model or key numbers", "Investors test your numbers.", True), ("traction", "Traction evidence (metrics, pilots, letters of intent)", "Proof beats claims.", False)],
+    "certification": [("exam_guide", "Official exam guide or syllabus", "Shows the domains that are tested.", True)],
+}

@@ -9,7 +9,7 @@ class TaskS(serializers.ModelSerializer):
 class SessionS(serializers.ModelSerializer):
     evaluation = serializers.SerializerMethodField()
     def get_evaluation(self, o):
-        e = getattr(o, "evaluation", None); return e and {"scores": e.scores, "summary": e.summary, "observations": e.observations}
+        e = getattr(o, "evaluation", None); return e and {"overall": e.overall, "verdict": e.verdict, "competencies": e.competencies, "unverified": e.unverified, "scores": e.scores, "summary": e.summary, "observations": e.observations}
     class Meta: model = Session; fields = ["id", "workspace", "mode", "started_at", "ended_at", "status", "vision", "evaluation"]
 class MemoryS(serializers.ModelSerializer):
     class Meta: model = MemoryItem; fields = ["category", "score", "observations", "note", "updated"]

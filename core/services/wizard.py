@@ -5,7 +5,8 @@ answer what to do next: skip what the earlier answers already cover, reword a qu
 short follow-ups when an answer was vague or unusual, and put the rest in the most useful order. The company and the role are always
 asked (research cannot start without them). Everything the model returns is checked in code, and if the model fails the flow simply
 carries on with the normal order, so the form never breaks."""
-import hashlib, json, re
+import hashlib, json, re, time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutTimeout
 from . import ai, kinds
 
 MAX_EXTRA = 6                       # follow-up questions of our own, over the whole flow
@@ -20,7 +21,7 @@ def catalogue(kind):
     for f in pf["fields"]: cat[f["key"]] = dict(short=f["short"], q=f["label"], type=f["type"], req=bool(f["req"]), options=f["options"])
     return cat
 
-DOC_CHARS = 1200      # how much of a CV or document the guide reads when deciding what to ask next
+DOC_CHARS = 700       # how much of a CV or document the guide reads when deciding what to ask next
 _cache = {}           # identical request -> its answer, so going back and forward does not spend the AI allowance twice
 
 def _l(v): return v if isinstance(v, list) else []
@@ -84,9 +85,61 @@ Rules: leave out a catalogue question when the answers above already cover it or
     key = hashlib.sha1((kind + prompt).encode()).hexdigest()
     if key in _cache: return clean(_cache[key], remaining, custom, cat)
     try:   # a small quick model, and never a long wait: this runs while the person watches, so on any trouble the normal order carries on
-        d = ai.parse_json(ai.call(prompt, json_mode=True, temperature=0.4, purpose="interview", max_tokens=1200, light=True, wait=4)[0])
+        d = ai.parse_json(ai.call(prompt, json_mode=True, temperature=0.3, purpose="research", max_tokens=600, light=True, wait=3, effort="low")[0])
     except ai.AIError: return {"order": list(remaining), "rewrite": {}, "ask": [], "say": "", "fallback": True}
     d = d if isinstance(d, dict) else {}
     if len(_cache) > 300: _cache.clear()
     _cache[key] = d
     return clean(d, remaining, custom, cat)
+
+
+# ---------- the quick document check: what does this interview expect me to bring? ----------
+_CVWORD = re.compile(r"\b(cv|c\.v\.?|curriculum|resume|r[ée]sum[ée])\b", re.I)
+_PRIVATE = re.compile(r"passport|national id|identity card|bank (details|account|number)|ssn|social security|card number", re.I)
+_dpool = ThreadPoolExecutor(max_workers=6)
+_dcache = {}   # (kind, company, position) -> (when, result): going back and forward in the flow does not search twice
+DOCS_WAIT = 6  # seconds the person waits at most: the web-checked list if it arrives in time, otherwise the quick list
+
+def _norm_docs(items, main):
+    out, seen = [], set()
+    for x in _l(items):
+        if not isinstance(x, dict): continue
+        label = _s(x.get("label"), 80)
+        if len(label) < 3 or _PRIVATE.search(label): continue                       # identity and banking numbers are never asked for here
+        key = re.sub(r"[^a-z0-9]+", "_", str(x.get("key") or label).lower()).strip("_")[:30] or "doc"
+        if key in seen or key == main["key"] or (main["key"] == "cv" and _CVWORD.search(label)): continue   # the main document has its own question
+        seen.add(key); out.append({"key": key, "label": label, "why": _s(x.get("why"), 150), "must": bool(x.get("must", True))})
+    return out[:6]
+
+def _docs_prompt(kind, company, position, jd, web):
+    pf = kinds.profile(kind); main = kinds.doc(kind)
+    return f"""Which documents should a candidate have ready for this: a {pf['label'].lower()}, organisation "{company or 'not given'}", role or programme "{position or 'not given'}"?
+{('From the posting: ' + jd) if jd else ''}
+{'Search the web first for the official application and interview guidance of this organisation, then answer.' if web else 'Answer from what you know.'}
+List only documents that a real panel, officer or employer for THIS process asks applicants to submit, bring or be ready to discuss. Be specific to this organisation, not generic. Leave out the candidate's {main['short'].lower()} (asked separately) and never list a passport, ID or bank numbers. At most 6, most important first. "must" is true when the process cannot go ahead without it.
+Return ONLY JSON: {{"docs": [{{"key": "short_snake_case", "label": "e.g. Bank statements of your sponsor", "why": "one short sentence on why they ask for it", "must": true}}]}}"""
+
+def docs_research(kind, company, position, jd=""):
+    """A small, fast look at which documents this interview expects, run just before the flow asks for documents. Two lookups run side by side on the
+    research keys: one answered from the model's own knowledge (about a second) and one web-checked. The web answer is used when it arrives within
+    DOCS_WAIT seconds, otherwise the quick one; if both fail, a short list for this interview type. Never raises."""
+    main = kinds.doc(kind); company, position, jd = _s(company, 80), _s(position, 80), _s(jd, 400)
+    ck = (kind, company.lower(), position.lower()); hit = _dcache.get(ck)
+    if hit and time.time() - hit[0] < 1800: return hit[1]
+    def quick():
+        with ai.budget(5): t, _ = ai.call(_docs_prompt(kind, company, position, jd, False), json_mode=True, temperature=0.2, purpose="research", max_tokens=600, light=True, wait=3, effort="low")
+        return _norm_docs(_d(ai.parse_json(t)).get("docs"), main)
+    def web():
+        with ai.budget(DOCS_WAIT): t, _ = ai.search(_docs_prompt(kind, company, position, jd, True), temperature=0.2, purpose="research", wait=DOCS_WAIT)
+        return _norm_docs(_d(ai.parse_json(t)).get("docs"), main)
+    qf, wf = _dpool.submit(quick), _dpool.submit(web)
+    def get(f, t):
+        try: return f.result(timeout=t)
+        except (FutTimeout, Exception): return []
+    w = get(wf, DOCS_WAIT); q = [] if w else get(qf, 1.5)
+    if w: res = {"docs": w, "source": "web"}
+    elif q: res = {"docs": q, "source": "knowledge"}
+    else: res = {"docs": _norm_docs([{"key": k, "label": l, "why": y, "must": m} for k, l, y, m in kinds.DEFAULT_DOCS.get(kind, [])], main), "source": "default"}
+    if len(_dcache) > 200: _dcache.clear()
+    if res["source"] != "default": _dcache[ck] = (time.time(), res)
+    return res
