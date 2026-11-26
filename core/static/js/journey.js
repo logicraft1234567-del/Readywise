@@ -76,7 +76,7 @@
         if (!f.isConnected) document.body.append(f);
         if (!moved && t > .5) { moved = true; show(to); }
         if (t < 1) { requestAnimationFrame(tick); return; }
-        f.remove(); nodes[to].classList.add("pop"); setTimeout(() => nodes[to].classList.remove("pop"), 950); flying = false; clearTimeout(guard);
+        f.remove(); nodes[to].classList.add("jn-pop"); setTimeout(() => nodes[to].classList.remove("jn-pop"), 950); flying = false; clearTimeout(guard);
       })(T0);
     });
   }
@@ -90,6 +90,6 @@
 
   const hash = location.hash.slice(1), start = panes[hash] ? hash : (celebrated || D.next);
   show(start, true);
-  if (celebrated) setTimeout(() => { burst(); nodes[celebrated].classList.add("pop"); toast("✓ " + (D.labels[celebrated] || "Step") + " complete. Nice work!"); }, 500);
+  if (celebrated) setTimeout(() => { burst(); nodes[celebrated].classList.add("jn-pop"); setTimeout(() => nodes[celebrated].classList.remove("jn-pop"), 950); toast("✓ " + (D.labels[celebrated] || "Step") + " complete. Nice work!"); }, 500);
   window.rwJourney = { show, connect };
 })();

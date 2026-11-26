@@ -24,7 +24,7 @@
 .jn-t{font-weight:600;font-size:.9rem;margin-top:.35rem}.jn.view .jn-t{color:var(--b1)}
 .jn-s{font-size:.75rem;color:var(--mut);font-weight:400}
 .jn-here{position:absolute;top:-1.1rem;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:.7rem;font-weight:600;color:var(--on-b1);background:var(--b1);padding:.08rem .45rem;border-radius:var(--r1)}
-.jn.pop .jn-dot{animation:dotpop .7s cubic-bezier(.3,1.5,.5,1)}@keyframes dotpop{0%{transform:scale(.7)}60%{transform:scale(1.2)}100%{transform:scale(1)}}
+.jn.jn-pop .jn-dot{animation:dotpop .7s cubic-bezier(.3,1.5,.5,1)}@keyframes dotpop{0%{transform:scale(.7)}60%{transform:scale(1.2)}100%{transform:scale(1)}}
 
 .stepbar{display:flex;gap:1rem;align-items:center;padding:0 0 1.1rem;margin-bottom:1.3rem;border-bottom:1px solid var(--line)}
 .stepbar .no{flex:none;width:38px;height:38px;border-radius:var(--r2);display:grid;place-items:center;font-weight:600;font-size:1rem;font-variant-numeric:tabular-nums;color:var(--b1);background:var(--soft)}
@@ -57,3 +57,7 @@
   .ws-foot-in{flex-wrap:wrap;padding:.6rem}.ft-mid{order:3;flex-basis:100%}.jbtn{flex:1;justify-content:center}
 }
 @media (prefers-reduced-motion:reduce){.journey *,.ws-foot *,.stepbar *{animation-duration:.01s!important;transition-duration:.01s!important}}
+
+/* the daily-tasks popup (planner.css, fixed bottom-right) used to sit on top of the sticky bar's big button: on this page it rides above the bar */
+body:has(#ws-foot) .pop{bottom:6.4rem}
+@media (max-width:760px){body:has(#ws-foot) .pop{bottom:10.5rem}}
