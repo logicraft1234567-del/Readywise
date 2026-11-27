@@ -137,3 +137,33 @@ def test_new_words_after_the_early_evaluation_make_it_run_again(client_in, monke
     monkeypatch.setattr(jobs.logic, "update_memory", lambda *a, **k: None); monkeypatch.setattr(jobs.logic, "adjust_plan", lambda *a, **k: None); monkeypatch.setattr(jobs.panelplan, "adapt_after_session", lambda *a, **k: None)
     jobs.prefetch_evaluation(s.pk); Turn.objects.create(session=s, role="candidate", text="One more thing I forgot to say before the end."); jobs.finalize_task(s.pk, [], None)
     assert len(calls) == 2   # the early result was discarded because the transcript changed
+
+# ---- a panel of live interviewers: one session each, one voice at a time ----
+def test_each_panelist_gets_their_own_brief_voice_and_a_handover_tool(client_in):
+    c = client_in; ws, s = _open(c); panel = list(Interviewer.objects.filter(owner=None)[:3]); assert len(panel) == 3
+    chair, other = live.instruction(s, panel[0], panel), live.instruction(s, panel[1], panel)
+    assert "ONLY INTERVIEWER" not in chair and "You are the chair" in chair and panel[1].name in chair and "hand_over" in chair and "introduce your colleagues" not in chair   # the opening line is sent as a message, not repeated here
+    assert "NOT the chair" in other and "YOU HAVE THE FLOOR" in other and "Say nothing until a message tells you" in other and "ONLY INTERVIEWER" not in other
+    v = live.voices_for(panel); assert len(set(v.values())) == 3 and all(x in live.FEMALE + live.MALE for x in v.values())   # three different voices
+    names = [f["name"] for f in live._tools(panel, panel[0])[0]["function_declarations"]]; assert names == ["end_interview", "hand_over"]
+    assert live._tools(panel[:1], panel[0])[0]["function_declarations"][0]["name"] == "end_interview" and len(live._tools(panel[:1], panel[0])[0]["function_declarations"]) == 1   # alone: nobody to hand over to
+
+def test_turns_keep_who_spoke(client_in):
+    c = client_in; ws, s = _open(c); panel = agents.session_panel(s); who = panel[-1]
+    c.post(f"/room/{s.pk}/live/turns/", content_type="application/json", data=json.dumps({"turns": [{"role": "interviewer", "text": "Over to my side.", "speaker": who.id}, {"role": "interviewer", "text": "Anyone.", "speaker": 999999}]}))
+    t = list(s.turns.order_by("id")); assert t[0].speaker == who and t[1].speaker == live.lead_of(s)   # an unknown speaker falls back to the chair
+
+# ---- repeat interviews explore new ground; the live interviewer cannot end it early ----
+def test_a_repeat_interview_is_told_what_was_already_asked(client_in):
+    c = client_in; ws, s = _open(c); assert agents.prior_block(s) == ""   # first attempt: nothing to avoid
+    iv = live.lead_of(s); Turn.objects.create(session=s, speaker=iv, role="interviewer", text="Welcome, I am Sam.", topic="introductions")
+    Turn.objects.create(session=s, speaker=iv, role="interviewer", text="Thanks for that. Walk me through the caching layer you built?")
+    s.status = "done"; s.agenda = [{"area": "Caching project", "owner": iv.id}]; s.save()
+    c.post(f"/w/{ws.pk}/session/", {}); s2 = Session.objects.exclude(pk=s.pk).get()
+    b = agents.prior_block(s2)
+    assert "Walk me through the caching layer you built?" in b and "Caching project" in b and "Welcome, I am Sam" not in b and "Do not ask any of these questions again" in b
+    assert "EARLIER INTERVIEWS" in live.instruction(s2) and "at most one question in five" in b
+
+def test_live_brief_forbids_ending_early(client_in):
+    c = client_in; ws, s = _open(c); text = live.instruction(s)
+    assert "refuses to end it early" in text and "candidate_stopped" in text and "never try before the last part" in text

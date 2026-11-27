@@ -327,6 +327,26 @@ PROCEDURE = """BEFORE YOU WRITE (private reasoning; put only the concise results
 Rules: confidence is not competence; fluent communication is not technical ability; a sophisticated-sounding answer is not necessarily correct; a short, nervous or imperfectly worded answer is not necessarily wrong. Judge the last answer on its own words: earlier notes are context, not a verdict. A vague claim: ask for the missing specifics directly. A sufficient answer: do not ask a follow-up, advance. An unsupported claim: probe it without accusing. A technically incorrect statement: name the specific issue and probe their understanding before concluding. A changed answer: put the discrepancy to them fairly. Always separate what the candidate personally did from what the team did. Move on only when the evidence is obtained, the remaining uncertainty is not worth pursuing, or time requires it."""
 
 
+def prior_block(sess):
+    """What earlier interviews for this same opportunity already covered, so a repeat attempt explores new ground. A few repeats are allowed where an answer was weak."""
+    older = [o for o in Session.objects.filter(workspace=sess.workspace).exclude(pk=sess.pk).order_by("-started_at")[:3] if o.turns.exists()]
+    if not older: return ""
+    qs, areas = [], []
+    for o in older:
+        for a in (o.agenda or []):
+            if isinstance(a, dict) and a.get("area") and a["area"] not in areas: areas.append(a["area"])
+        for t in o.turns.filter(role="interviewer").exclude(topic="introductions").order_by("-id")[:40]:
+            qm = [x for x in re.split(r"(?<=[.!?])\s+", " ".join(t.text.split())) if x.endswith("?")]
+            if qm and qm[-1][:130] not in qs: qs.append(qm[-1][:130])
+    ev = getattr(older[0], "evaluation", None)
+    weak = [c.get("name") for c in (ev.competencies if ev else []) if isinstance(c, dict) and c.get("rating") in ("partial", "not_demonstrated") and c.get("name")][:4]
+    return ("EARLIER INTERVIEWS FOR THIS SAME OPPORTUNITY (this is a repeat attempt, so it must feel fresh, not like the last one):\n"
+            + (f"Areas already covered: {' | '.join(areas[:14])}\n" if areas else "")
+            + (f"Questions already asked: {' || '.join(qs[:28])}\n" if qs else "")
+            + (f"Weak last time: {', '.join(weak)}\n" if weak else "")
+            + "RULES: Do not ask any of these questions again or reword them. Explore NEW ground: other parts of the candidate's documents, other research topics, new scenarios and different angles on the same competencies. "
+              "A few repeats are fine, at most one question in five, and only to re-test something answered weakly before, from a new angle.")
+
 def build_agenda(sess, panel):
     """The panel meets before the interview: who covers which area, in which order, so nobody overlaps and every area of the brief is covered. Stored on the session."""
     ws = sess.workspace; r = ws.research or {}; people = "\n".join(f"- id={i.id} {i.name}, {i.position}. Covers: {i.responsibilities[:160]}" for i in panel)
@@ -336,6 +356,7 @@ def build_agenda(sess, panel):
 PANEL:\n{people}
 RESEARCH TOPICS: {topics}. STAGES: {r.get('stages')}. {_brief(ws, 900)}
 Time: {ws.duration} minutes (the interview runs for the whole time; plan enough areas to fill it, the agenda is extended if it runs out). Difficulty: {ws.difficulty}.
+{prior_block(sess)}
 ROLE LENS (assess this kind of role in this way, not a generic way): {role_lens(ws)}
 First define the RUBRIC: 4 to 7 competencies this opportunity really requires (specific to this role and organisation, not generic), each with what real evidence of it looks like and a weight 1 to 10. Then make the agenda from it.
 Make 5 to 9 agenda items. Each item is ONE area to test, owned by exactly one panel member (match the area to what they cover; spread the items fairly; a solo panel owns them all). Order them like a real interview: opening and motivation first, the core of the role or case in the middle, the hardest challenge of claims and evidence near the end. Include at least one item that checks the candidate's claims against the documents on file or the CV, and one on the weakest point of their profile.
@@ -343,7 +364,7 @@ Every item must serve one competency (its "competency" key). Do not invent emplo
 Shape: {{"competencies": [{{"key": "snake_case", "name": str, "looks_like": "what real evidence of it looks like", "weight": int}}], "items": [{{"owner": <panel member id>, "area": "short name of the area", "competency": "key from competencies", "goal": "what this member needs to find out, one sentence"}}]}}"""
     items = []; rubric = None
     try:
-        d = ai.parse_json(ai.call(prompt, json_mode=True, temperature=0.4, purpose="interview", max_tokens=1800, effort="low")[0]); ok = {i.id for i in panel}
+        d = ai.parse_json(ai.call(prompt, json_mode=True, temperature=0.7 if "EARLIER INTERVIEWS" in prompt else 0.4, purpose="interview", max_tokens=1800, effort="low")[0]); ok = {i.id for i in panel}
         rubric = clean_rubric(d.get("competencies") if isinstance(d, dict) else None, ws); rk = {c["key"] for c in rubric}
         for x in (d.get("items") if isinstance(d, dict) else None) or []:
             if isinstance(x, dict) and x.get("owner") in ok and str(x.get("area", "")).strip(): items.append({"owner": x["owner"], "area": str(x["area"])[:80], "competency": x.get("competency") if x.get("competency") in rk else None, "goal": str(x.get("goal", ""))[:160], "tries": 0, "done": False})
@@ -472,6 +493,7 @@ INTERVIEW TYPE GUIDE (follow this style of questioning): {kinds.profile(ws.kind)
 DIFFICULTY (set by the system): {ws.difficulty}. MODE: {MODES.get(sess.mode, MODES['normal'])}
 The candidate prefers a {style} interviewer. Never be abusive or humiliating. Conduct the whole interview in {lang}.
 Time remaining: {int(remaining)}s of {ws.duration*60}s. Topics already covered: {sess.covered[-10:]}.
+{prior_block(sess)}
 CONVERSATION:\n{convo}
 {heard_rule}
 PHASE: {phase}

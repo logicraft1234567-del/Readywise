@@ -1,4 +1,7 @@
-/* ReadyWise live voice. The microphone goes straight to Google's Gemini Live over a WebSocket, using a one-session token minted by the server
+/* ReadyWise live voice. With a panel, every interviewer has their own Gemini Live session (own voice, own key where possible). Only ONE speaks at a time:
+   the candidate's microphone and camera go to the interviewer who has the floor, and that interviewer hands over by calling hand_over(to). The browser then
+   waits for the voice to finish, gives the colleague the floor and catches them up on what was said since they last spoke.
+   The microphone goes straight to Google's Gemini Live over a WebSocket, using a one-session token minted by the server
    (the real API key never reaches the browser). Gemini hears the raw audio, answers in audio, and handles turn-taking and interruptions itself.
    Once a second a small camera picture is sent too (sampled frames, not continuous video). The written transcript Gemini returns is saved
    by the server for the report only; it is not what the model reasons from.
@@ -6,12 +9,14 @@
 const Live = (() => {
   const URL_BASE = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained?access_token=";
   const IN_RATE = 16000, OUT_RATE = 24000, CHUNK = 640;   // 40 ms of 16 kHz audio per message
-  let ws = null, inCtx = null, outCtx = null, node = null, mic = null, outGain = null, outAn = null, inAn = null;
-  let meta = null, lead = null, handle = null, closing = false, stopping = false, nextT = 0, raf = 0, frameT = null, timers = [];
+  let M = [], act = 0, shared = [], switching = false, inCtx = null, outCtx = null, node = null, mic = null, outGain = null, outAn = null, inAn = null;
+  let meta = null, lead = null, closing = false, stopping = false, nextT = 0, raf = 0, frameT = null, timers = [];
   let acc = [], pos = 0, out = [], cur = null, pending = [], posting = false, srcs = new Set(), speaking = false;
   let queue = [], awaiting = false, awaitT = 0, lastVoice = 0, ivCount = 0, factUntil = 0, askingTask = false, taskDone = false, taskTries = 0;
   const api = { active: false };
-  const send = o => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); };
+  const sendTo = (i, o) => { const w = M[i] && M[i].ws; if (w && w.readyState === 1) w.send(JSON.stringify(o)); };
+  const send = o => sendTo(act, o);   // everything the candidate says or shows goes to the interviewer who has the floor
+  const W = () => M[act] && M[act].ws;
   const b64 = u8 => { let s = ""; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
 
   /* ---------- microphone: any sample rate in, 16 kHz 16-bit PCM out ---------- */
@@ -66,11 +71,11 @@ const Live = (() => {
   /* ---------- transcript: kept for the report and shown in the side panel ---------- */
   function frag(role, text) {
     if (!text) return; if (cur && cur.role !== role) endTurn();
-    if (!cur) cur = { role, text: "", node: logMsg(role === "candidate" ? "You" : lead.name + ", " + lead.position, "", role === "candidate" ? "c" : "i") };
+    if (!cur) cur = { role, text: "", who: lead, node: logMsg(role === "candidate" ? "You" : lead.name + ", " + lead.position, "", role === "candidate" ? "c" : "i") };
     cur.text += text; const t = cur.text.replace(/\s+/g, " ").trim(); cur.node.lastChild.textContent = t; caption(t, role === "candidate"); $("msgs").scrollTop = 1e9;
   }
   function endTurn() {
-    if (!cur) return; const role = cur.role, t = cur.text.replace(/\s+/g, " ").trim(); if (t) pending.push({ role, text: t }); cur = null; flush();
+    if (!cur) return; const role = cur.role, t = cur.text.replace(/\s+/g, " ").trim(); const who = cur.who; if (t) { pending.push({ role, text: t, speaker: role === "candidate" ? undefined : who.id }); shared.push({ who: role === "candidate" ? "Candidate" : who.name, text: t }); } cur = null; flush();
     if (t && role === "candidate") factUntil = Date.now() + 45000;   // a verified correction may arrive in the next few seconds
     if (t && role === "interviewer") { ivCount++; maybeTask(); }
   }
@@ -81,51 +86,79 @@ const Live = (() => {
   }
 
   /* ---------- messages from Gemini ---------- */
-  function onMsg(m) {
-    if (m.sessionResumptionUpdate && m.sessionResumptionUpdate.newHandle) handle = m.sessionResumptionUpdate.newHandle;
-    if (m.goAway) reconnect();
-    if (m.toolCall && m.toolCall.functionCalls) m.toolCall.functionCalls.forEach(f => { if (f.name === "end_interview") endByInterviewer(f); });
-    const c = m.serverContent; if (!c) return;
+  function onMsg(i, m) {
+    if (m.sessionResumptionUpdate && m.sessionResumptionUpdate.newHandle) M[i].handle = m.sessionResumptionUpdate.newHandle;
+    if (m.goAway) reconnect(i);
+    if (m.toolCall && m.toolCall.functionCalls) m.toolCall.functionCalls.forEach(f => { if (f.name === "end_interview") endByInterviewer(i, f); else if (f.name === "hand_over") handOver(i, f); });
+    const c = m.serverContent; if (!c || i !== act) return;   // a colleague who does not have the floor is never heard
     if (c.interrupted) { cutVoice(); endTurn(); }
     if (c.modelTurn && c.modelTurn.parts) c.modelTurn.parts.forEach(p => { if (p.inlineData && p.inlineData.data && !stopping) play(p.inlineData.data); });
     if (c.inputTranscription && c.inputTranscription.text) frag("candidate", c.inputTranscription.text);
     if (c.outputTranscription && c.outputTranscription.text) frag("interviewer", c.outputTranscription.text);
     if (c.turnComplete) { awaiting = false; endTurn(); if (closing) setTimeout(() => { const wait = () => srcs.size ? setTimeout(wait, 300) : finish(); wait(); }, 800); }
   }
-  let endCalled = false;
-  function endByInterviewer(f) {   // the interviewer decided the interview is over (finished, or the candidate was unprofessional): let the closing words play out, then end it
-    send({ toolResponse: { functionResponses: [{ id: f.id, name: f.name, response: { result: "Interview ended. Say nothing more." } }] } });
+  let endCalled = false, startedAt = Date.now();
+  function endByInterviewer(i, f) {   // the interviewer decided the interview is over (finished, or the candidate was unprofessional): let the closing words play out, then end it
+    const why = String((f.args && f.args.reason) || ""), left = Math.round((meta.limit_s - (Date.now() - startedAt) / 1000) / 60);
+    if (why !== "unprofessional" && why !== "candidate_stopped" && left > Math.max(2, meta.limit_s / 60 * 0.15)) {   // "completed" is only accepted near the end of the chosen time
+      sendTo(i, { toolResponse: { functionResponses: [{ id: f.id, name: f.name, response: { result: `Refused: about ${left} minutes of the interview are still left. Do not end it. Carry on: probe a weak answer deeper or start a new area from the plan.` } }] } }); return;
+    }
+    sendTo(i, { toolResponse: { functionResponses: [{ id: f.id, name: f.name, response: { result: "Interview ended. Say nothing more." } }] } });
     if (endCalled) return; endCalled = true; closing = true; queue = [];
     let waited = 0, quiet = 0;
     const t = setInterval(() => { waited += 300; quiet = (speaking || srcs.size) ? 0 : quiet + 300; if ((waited >= 3000 && quiet >= 1500) || waited >= 20000) { clearInterval(t); finish(); } }, 300);
     timers.push(t);
   }
-  async function connect(resume) {
+  async function connect(i, resume) {
+    const m = M[i];
     return new Promise((res, rej) => {
-      const sock = new WebSocket(URL_BASE + encodeURIComponent(meta.token)); let ready = false;
+      const sock = new WebSocket(URL_BASE + encodeURIComponent(m.token)); let ready = false;
       const t = setTimeout(() => { if (!ready) { try { sock.close(); } catch (e) { } rej(new Error("The live voice did not answer in time.")); } }, 10000);
-      sock.onopen = () => sock.send(JSON.stringify({ setup: Object.assign({ model: "models/" + meta.model }, resume && handle ? { sessionResumption: { handle } } : {}) }));
+      const useHandle = resume && m.handle; m.fresh = !useHandle;   // a session that could not be resumed has lost its memory: it gets the whole conversation when it next speaks
+      sock.onopen = () => sock.send(JSON.stringify({ setup: Object.assign({ model: "models/" + meta.model }, useHandle ? { sessionResumption: { handle: m.handle } } : {}) }));
       sock.onmessage = async ev => {
-        let m; try { m = JSON.parse(typeof ev.data === "string" ? ev.data : await ev.data.text()); } catch (e) { return; }
-        if (m.setupComplete && !ready) { ready = true; clearTimeout(t); ws = sock; res(); return; }
-        if (ready) onMsg(m);
+        let d; try { d = JSON.parse(typeof ev.data === "string" ? ev.data : await ev.data.text()); } catch (e) { return; }
+        if (d.setupComplete && !ready) { ready = true; clearTimeout(t); m.ws = sock; res(); return; }
+        if (ready) onMsg(i, d);
       };
       sock.onerror = () => { if (!ready) { clearTimeout(t); rej(new Error("The live voice could not connect.")); } };
-      sock.onclose = () => { if (!ready) { clearTimeout(t); rej(new Error("The live voice closed the connection.")); } else if (sock === ws && !stopping) reconnect(); };
+      sock.onclose = () => { if (!ready) { clearTimeout(t); rej(new Error("The live voice closed the connection.")); } else if (sock === m.ws && !stopping) reconnect(i); };
     });
   }
-  let reconnecting = false;
-  async function reconnect() {
-    if (reconnecting || stopping) return; reconnecting = true; setState("Reconnecting…");
-    try { const old = ws; ws = null; if (old) { old.onclose = null; try { old.close(); } catch (e) { } } meta = Object.assign(meta, await post(`/room/${SID}/live/token/`, {})); await connect(true); setState("Listening…"); }
-    catch (e) { toast("The live voice connection was lost. Press End interview to finish; what was said is saved.", true); setState("Connection lost."); }
-    reconnecting = false;
+  const reconnecting = {};
+  async function reconnect(i) {
+    if (reconnecting[i] || stopping) return; reconnecting[i] = true; const m = M[i]; if (i === act) setState("Reconnecting…");
+    try { const old = m.ws; m.ws = null; if (old) { old.onclose = null; try { old.close(); } catch (e) { } } const r = await post(`/room/${SID}/live/token/`, { member: m.iv.id }); m.token = r.members[0].token; await connect(i, true); if (i === act) setState("Listening…"); }
+    catch (e) { if (i === act) { toast("The live voice connection was lost. Press End interview to finish; what was said is saved.", true); setState("Connection lost."); } }
+    reconnecting[i] = false;
+  }
+
+  /* ---------- the floor: one interviewer at a time ---------- */
+  function catchUp(m) {   // what was said since this interviewer last spoke (everything, if their session had to start over)
+    const from = m.fresh ? 0 : m.lastIdx; let t = shared.slice(from).map(x => x.who + ": " + x.text).join("\n"); if (t.length > 3500) t = "..." + t.slice(-3500); return t;
+  }
+  function handOver(i, f) {
+    const to = String((f.args && f.args.to) || "").trim().toLowerCase();
+    const j = M.findIndex((m, k) => k !== i && m.ws && (m.iv.name.toLowerCase() === to || m.iv.name.toLowerCase().split(" ")[0] === to.split(" ")[0]));
+    if (i !== act || j < 0 || closing || stopping || switching) { sendTo(i, { toolResponse: { functionResponses: [{ id: f.id, name: f.name, response: { result: "Not possible now. Carry on yourself." } }] } }); return; }
+    sendTo(i, { toolResponse: { functionResponses: [{ id: f.id, name: f.name, response: { result: "Handed over. Say nothing more." } }] } });
+    switching = true; let waited = 0, quiet = 0;
+    const t = setInterval(() => {   // let the handover line finish playing before the colleague speaks
+      waited += 250; quiet = (speaking || srcs.size) ? 0 : quiet + 250;
+      if ((waited >= 1000 && quiet >= 600) || waited >= 9000) { clearInterval(t); switchTo(j); }
+    }, 250); timers.push(t);
+  }
+  function switchTo(j) {
+    endTurn(); const from = M[act]; from.lastIdx = shared.length; act = j; const m = M[j]; lead = m.iv; switching = false;
+    const said = catchUp(m); m.fresh = false;
+    sendTo(j, { realtimeInput: { text: "YOU HAVE THE FLOOR. Here is what was said since you last spoke (the candidate's words are from the live transcript and may contain small errors):\n" + (said || "(nothing yet)") + "\nContinue the interview from here with your own areas. Reply to what the candidate last said in one sentence if it was directed at you or needs a response, introduce yourself in one short sentence if this is your first turn, then ask ONE question." } });
+    awaiting = true; clearTimeout(awaitT); awaitT = setTimeout(() => { awaiting = false; }, 20000); lastVoice = 0;
   }
 
   /* ---------- written messages to the model, sent only when it is quiet and the candidate is not speaking, so nobody is cut off ---------- */
   function enqueue(text, kind, front, run) { const it = { text, kind, run }; if (front) queue.unshift(it); else queue.push(it); }
   function pump() {
-    if (!queue.length || awaiting || speaking || stopping || reconnecting || !ws || ws.readyState !== 1 || Date.now() - lastVoice < 1500) return;
+    if (!queue.length || awaiting || speaking || stopping || switching || reconnecting[act] || !W() || W().readyState !== 1 || Date.now() - lastVoice < 1500) return;
     const it = queue.shift(); if (it.run) { try { it.run(); } catch (e) { } }
     send({ realtimeInput: { text: it.text } }); awaiting = true; clearTimeout(awaitT); awaitT = setTimeout(() => { awaiting = false; }, 20000);
   }
@@ -157,7 +190,7 @@ const Live = (() => {
   function startFrames() {
     const cv = document.createElement("canvas"), g = cv.getContext("2d");
     frameT = setInterval(() => {
-      if ((typeof camOff !== "undefined" && camOff) || document.hidden || !ws || ws.readyState !== 1) return;
+      if ((typeof camOff !== "undefined" && camOff) || document.hidden || !W() || W().readyState !== 1) return;
       const v = $("me"); if (!v.videoWidth) return; cv.width = 480; cv.height = Math.round(480 * v.videoHeight / v.videoWidth); g.drawImage(v, 0, 0, cv.width, cv.height);
       send({ realtimeInput: { video: { data: cv.toDataURL("image/jpeg", .6).split(",")[1], mimeType: "image/jpeg" } } });
     }, 1000);
@@ -168,9 +201,14 @@ const Live = (() => {
     const box = $("liveconsent"); if (!box || !box.checked) return false;
     if (!stream || !stream.getAudioTracks().length) { toast("The live voice needs your microphone. Using the standard interview."); return false; }
     try {
-      meta = await post(`/room/${SID}/live/token/`, {}); lead = meta.lead;
-      const mine = PANEL.find(p => p.id === lead.id) || Object.assign({ gender: "m" }, lead); PANEL.length = 0; PANEL.push(mine); lead = mine; buildStage(); layoutSquares();   // one interviewer speaks in live mode
-      startOut(); await startMic(); await connect(false);
+      meta = await post(`/room/${SID}/live/token/`, {});
+      M = (meta.members || [Object.assign({ token: meta.token }, meta.lead)]).map(mm => ({ iv: PANEL.find(p => p.id === mm.id) || Object.assign({ gender: "m" }, mm), token: mm.token, ws: null, handle: null, lastIdx: 0, fresh: false }));
+      act = 0; shared = []; switching = false; lead = M[0].iv; startedAt = Date.now();
+      startOut(); await startMic();
+      const rs = await Promise.allSettled(M.map((m, i) => connect(i, false)));
+      if (rs[0].status !== "fulfilled") throw rs[0].reason;   // the chair must be live; a colleague who cannot connect simply is not on this panel
+      M = M.filter((m, i) => rs[i].status === "fulfilled");
+      const ivs = M.map(m => m.iv); if (ivs.length !== PANEL.length || ivs.some((p, k) => p !== PANEL[k])) { PANEL.length = 0; PANEL.push(...ivs); buildStage(); layoutSquares(); }
     } catch (e) { cleanup(); toast((e && e.message ? e.message : "The live voice is unavailable") + " Using the standard interview."); return false; }
     api.active = true; document.body.classList.add("live-on"); setState("Listening…"); if ($("vconsent")) { /* the end-of-interview snapshot consent is separate and unchanged */ }
     send({ realtimeInput: { text: meta.opening } }); startFrames(); raf = requestAnimationFrame(loop); timers.push(setInterval(pump, 600), setInterval(pollFacts, 4000));
@@ -180,7 +218,7 @@ const Live = (() => {
   };
   function cleanup() {
     cancelAnimationFrame(raf); clearInterval(frameT); timers.forEach(t => { clearTimeout(t); clearInterval(t); }); timers = []; queue = []; clearTimeout(awaitT);
-    if (ws) { ws.onclose = null; try { ws.close(); } catch (e) { } ws = null; }
+    M.forEach(m => { if (m.ws) { m.ws.onclose = null; try { m.ws.close(); } catch (e) { } m.ws = null; } });
     try { if (node) node.disconnect(); if (mic) mic.disconnect(); } catch (e) { }
     [inCtx, outCtx].forEach(c => { try { c && c.close(); } catch (e) { } }); inCtx = outCtx = node = mic = null; srcs.clear(); api.active = false; document.body.classList.remove("live-on");
   }

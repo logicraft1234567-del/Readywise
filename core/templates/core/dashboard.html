@@ -1,30 +1,31 @@
 {% extends 'core/app_base.html' %}{% load static %}{% block title %}Dashboard: ReadyWise{% endblock %}
 {% block actions %}<a class="btn sm" href="{% url 'analysis' %}"><i data-lucide="chart-column" width="14"></i>Analysis</a>{% endblock %}
-{% block content %}
+{% block content %}<div class="dash">
 {% if not profile.full_name %}<a class="nudge" href="{% url 'welcome' %}"><i data-lucide="sparkles" width="18" style="color:var(--b1);flex:none"></i><span><b>Finish setting up your profile</b><small>One question at a time, about a minute. Skip anything.</small></span><span class="go">Start</span></a>{% endif %}
-<div class="pg-head" style="margin-top:.4rem"><div><h1>{{ hello }}, {{ display_name }}.</h1><p>{% if stats.due %}You have {{ stats.due }} task{{ stats.due|pluralize }} to do today.{% else %}Nothing is overdue. Pick what to practise next.{% endif %} ReadyWise chooses your interviewers and difficulty for every interview.</p></div>
+<div class="pg-head"><div><h1>{{ hello }}, {{ display_name }}.</h1><p>{% if stats.due %}You have {{ stats.due }} task{{ stats.due|pluralize }} to do today.{% else %}Nothing is overdue. Pick what to practise next.{% endif %} ReadyWise chooses your interviewers and difficulty for every interview.</p></div>
 <div class="flex flex-wrap gap-2">{% if rows %}<a class="btn" href="{% url 'ws' rows.0.w.pk %}">Continue: {{ rows.0.w.title|truncatechars:22 }}</a>{% endif %}<a class="btn solid" href="{% url 'ws_new' %}"><i data-lucide="plus" width="16"></i>New interview</a></div></div>
 {% if not profile.cv_text %}<div class="nudge" style="cursor:default"><i data-lucide="file-up" width="18" style="color:var(--b1)"></i><span class="text-sm">Add your CV so interviewers can ask about your real experience.</span><a class="btn sm ml-auto" href="{% url 'profile' %}">Add CV</a></div>{% endif %}
 <div class="strip"><div><small>Tasks due today</small><b>{{ stats.due }}</b></div><div><small>Active interviews</small><b>{{ stats.active }}</b></div><div><small>Day streak</small><b>{{ progress.streak }}</b></div><div><small>Average skill score</small><b>{% if stats.avg is None %}–{% else %}{{ stats.avg }}{% endif %}</b></div></div>
 
-<div class="dash-cols mt-2">
+<div class="dash-cols">
 <div class="min-w-0"><div class="sec-title" style="margin-top:0"><h2>Your interviews</h2></div>
-{% for r in rows %}<div class="glass card mb-3{% if forloop.first %} feat{% endif %}" data-s="{{ r.w.title|lower }} {{ r.w.company|lower }} {{ r.w.get_kind_display|lower }}"><div class="flex flex-wrap justify-between gap-3"><div class="min-w-0"><div class="flex flex-wrap gap-1"><span class="chip"><i data-lucide="{{ r.kind_icon }}" width="12"></i>{{ r.w.get_kind_display }}</span><span class="chip">{{ r.diff }}</span>{% if r.left is not None %}<span class="chip">{{ r.left }} day{{ r.left|pluralize }} left</span>{% endif %}</div><h3 class="text-lg mt-2"><a href="{% url 'ws' r.w.pk %}" style="text-decoration:none;color:inherit">{{ r.w.title }}</a></h3><p class="text-sm" style="color:var(--mut)">{{ r.w.company }} {{ r.w.position }}</p></div>
+{% for r in rows %}<div class="glass card mb-2{% if forloop.first %} feat{% endif %}" data-s="{{ r.w.title|lower }} {{ r.w.company|lower }} {{ r.w.get_kind_display|lower }}"><div class="flex flex-wrap justify-between gap-3"><div class="min-w-0"><div class="flex flex-wrap gap-1"><span class="chip"><i data-lucide="{{ r.kind_icon }}" width="12"></i>{{ r.w.get_kind_display }}</span><span class="chip">{{ r.diff }}</span>{% if r.left is not None %}<span class="chip">{{ r.left }} day{{ r.left|pluralize }} left</span>{% endif %}</div><h3 class="text-lg mt-2"><a href="{% url 'ws' r.w.pk %}" style="text-decoration:none;color:inherit">{{ r.w.title }}</a></h3><p class="text-sm" style="color:var(--mut)">{{ r.w.company }} {{ r.w.position }}</p></div>
 <div class="text-right"><div class="dots justify-end" title="Research, Plan, Interview">{% for ok in r.steps %}<i class="{% if ok %}on{% endif %}"></i>{% endfor %}</div><small style="color:var(--mut)">Research, Plan, Interview</small><div class="flex justify-end mt-2">{% for i in r.panel %}<img src="{% static i.image %}" title="{{ i.name }}, {{ i.position }}" class="w-8 h-8 rounded-full object-cover -ml-2 first:ml-0" style="border:2px solid var(--surface)" alt="{{ i.name }}">{% endfor %}</div></div></div>
-<div class="mt-4"><div class="flex justify-between text-xs mb-1" style="color:var(--mut)"><span>Plan progress</span><b style="color:var(--ink)">{{ r.done }}/{{ r.tasks }}</b></div><div class="bar"><i data-w="{{ r.pct }}"></i></div></div>
-<div class="flex flex-wrap items-center justify-between gap-2 mt-4"><span class="text-sm"><b>Next:</b> {{ r.next }}</span><a class="btn sm solid" href="{% url 'ws' r.w.pk %}">Continue<i data-lucide="arrow-right" width="14"></i></a></div></div>
-{% empty %}<div class="glass p-8 text-center"><img class="w-10 mx-auto mb-3" src="{% static 'img/mark.svg' %}" alt=""><b>No interviews yet.</b><p class="text-sm" style="color:var(--mut)">Pick a type below to create your first workspace.</p></div>{% endfor %}</div>
-
-<div class="min-w-0"><div class="sec-title" style="margin-top:0"><h2>Tasks</h2></div>
-<a class="glass card tasks-card" href="{% url 'tasks' %}"><div class="ico"><i data-lucide="list-checks" width="19"></i></div><div class="min-w-0"><b>{% if stats.due %}{{ stats.due }} task{{ stats.due|pluralize }} due today{% else %}Nothing due today{% endif %}</b><p class="text-sm" style="color:var(--mut)">Open your tasks</p></div><i data-lucide="arrow-right" width="16" style="margin-left:auto;color:var(--mut)"></i></a>
+<div class="mt-3"><div class="flex justify-between text-xs mb-1" style="color:var(--mut)"><span>Plan progress</span><b style="color:var(--ink)">{{ r.done }}/{{ r.tasks }}</b></div><div class="bar"><i data-w="{{ r.pct }}"></i></div></div>
+<div class="flex flex-wrap items-center justify-between gap-2 mt-3"><span class="text-sm"><b>Next:</b> {{ r.next }}</span><a class="btn sm solid" href="{% url 'ws' r.w.pk %}">Continue<i data-lucide="arrow-right" width="14"></i></a></div></div>
+{% empty %}<div class="glass p-5 text-center"><img class="w-10 mx-auto mb-3" src="{% static 'img/mark.svg' %}" alt=""><b>No interviews yet.</b><p class="text-sm" style="color:var(--mut)">Pick a type below to create your first workspace.</p></div>{% endfor %}
 <div class="sec-title"><h2>Score over time</h2><a class="an-link" href="{% url 'analysis' %}">Full analysis<i data-lucide="arrow-right" width="13"></i></a></div>
 <section class="glass pg-card"><header><div><p>{{ progress.trend.text }}</p></div><span class="dl {{ progress.trend.state }}">{% if progress.trend.state == 'up' %}Improving{% elif progress.trend.state == 'down' %}Declining{% elif progress.trend.state == 'flat' %}Holding steady{% else %}Not enough data{% endif %}</span></header>
 {% if progress.series %}<div class="chart-box"><canvas id="pg-score" role="img" aria-label="Interview score over time"></canvas></div>{% else %}<div class="pg-empty"><div><b>No scores yet</b>Finish a practice interview and your trend starts here.</div></div>{% endif %}</section>
-<div class="sec-title"><h2>Recent sessions</h2></div>{% for s in sessions %}<a class="glass card mb-2 flex justify-between text-sm" style="text-decoration:none;color:inherit;padding:.8rem 1rem" href="{% url 'report' s.pk %}"><span>{{ s.workspace.title|truncatechars:24 }}</span><small style="color:var(--mut)">{{ s.started_at|date:"M d" }}</small></a>{% empty %}<p class="text-sm" style="color:var(--mut)">None yet.</p>{% endfor %}</div>
 </div>
-
-<div class="sec-title"><h2>What are you preparing for?</h2><span>Pick one to start a new workspace</span></div>
+<div class="min-w-0 dash-side">
+<div class="sec-title"><h2>Tasks</h2></div>
+<a class="glass card tasks-card" href="{% url 'tasks' %}"><div class="ico"><i data-lucide="list-checks" width="19"></i></div><div class="min-w-0"><b>{% if stats.due %}{{ stats.due }} task{{ stats.due|pluralize }} due today{% else %}Nothing due today{% endif %}</b><p class="text-sm" style="color:var(--mut)">Open your tasks</p></div><i data-lucide="arrow-right" width="16" style="margin-left:auto;color:var(--mut)"></i></a>
+<div class="sec-title"><h2>Recent sessions</h2></div>{% for s in sessions %}<a class="glass card mb-1 flex justify-between text-sm" style="text-decoration:none;color:inherit;padding:.6rem .9rem" href="{% url 'report' s.pk %}"><span>{{ s.workspace.title|truncatechars:24 }}</span><small style="color:var(--mut)">{{ s.started_at|date:"M d" }}</small></a>{% empty %}<p class="text-sm" style="color:var(--mut)">None yet.</p>{% endfor %}
+<div class="sec-title"><h2>Start a new interview</h2></div>
 <div class="type-chips">{% for k,l,ic,d in cards %}<a class="chip-link" href="{% url 'ws_new' %}?kind={{ k }}" title="{{ d }}"><i data-lucide="{{ ic }}" width="15"></i>{{ l }}</a>{% endfor %}</div>
+</div>
+</div>
 
 {{ progress.series|json_script:"pg-series" }}
 <script>document.addEventListener("DOMContentLoaded",()=>{
@@ -35,4 +36,4 @@
     {label:"Score",data:S.map(s=>s.score),borderWidth:2.5,tension:.25,pointRadius:4,pointHoverRadius:6,pointBackgroundColor:b1,pointBorderColor:v("--surface"),pointBorderWidth:2,borderColor:b1,segment:{borderColor:c=>c.p1.parsed.y<c.p0.parsed.y?bad:ok}},
     {label:"Strong (70)",data:S.map(()=>70),borderDash:[5,5],borderWidth:1.2,pointRadius:0,borderColor:mut}]},
    options:{responsive:true,maintainAspectRatio:false,animation:{duration:600},plugins:{legend:{display:true,position:"bottom",labels:{boxWidth:10,boxHeight:2,usePointStyle:false}},tooltip:{callbacks:{title:i=>S[i[0].dataIndex].title+" ("+i[0].label+")"}}},scales:{y:{min:0,max:100,ticks:{stepSize:25},grid:{color:grid}},x:{grid:{display:false}}}}});
-});</script>{% endblock %}
+});</script></div>{% endblock %}

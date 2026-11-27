@@ -168,3 +168,16 @@
 .tk-sec{display:grid;gap:.6rem;grid-template-columns:minmax(0,1fr)}
 .tk-day{display:grid;gap:.5rem;margin-bottom:.9rem}
 .tasks-card{display:flex;align-items:center;gap:.9rem;text-decoration:none;color:inherit}.tasks-card .ico{margin:0}
+
+/* dashboard: compact spacing, no dead space between blocks */
+.dash .pg-head{margin:.2rem 0 1rem;gap:.7rem 1rem;align-items:center}
+.dash .pg-head h1{font-size:clamp(1.7rem,2.6vw,2.2rem)}.dash .pg-head p{margin-top:.25rem;font-size:.93rem}
+.dash .nudge{margin-bottom:.75rem;padding:.7rem 1rem}
+.dash .strip>div{padding:.75rem 1.1rem}.dash .strip small{margin-bottom:.2rem;font-size:.8rem}.dash .strip b{font-size:1.55rem}
+.dash .dash-cols{margin-top:1rem;gap:1.25rem}
+.dash .sec-title{margin:1.1rem 0 .55rem}.dash .dash-cols>div>.sec-title:first-child{margin-top:0}
+.dash .card{padding:1rem 1.1rem}.dash .pg-card{padding:.9rem 1.1rem}
+.dash .pg-card header{margin-bottom:.5rem}.dash .chart-box{height:200px}.dash .pg-empty{min-height:130px}
+.dash .type-chips{gap:.4rem}.dash .chip-link{padding:.4rem .7rem;font-size:.84rem}
+@media(min-width:1024px){.dash .dash-side{position:sticky;top:1rem}.dash .dash-cols{grid-template-columns:minmax(0,1fr) minmax(300px,360px)}}
+@media(max-width:1000px){.dash .dash-cols{gap:1rem}}

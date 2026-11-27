@@ -597,7 +597,10 @@ def room_live_token(request, pk):
     if s.status != "open": return JsonResponse({"error": "This interview has ended."}, status=400)
     if not live.enabled(): return JsonResponse({"error": "Live voice is not set up on this server."}, status=400)
     if not s.turns.exists(): s.started_at = timezone.now(); s.save(update_fields=["started_at"])   # same: the clock starts when the interview does
-    try: return JsonResponse(live.mint(s))
+    try: d = json.loads(request.body or b"{}")
+    except ValueError: d = {}
+    member = d.get("member") if isinstance(d, dict) and isinstance(d.get("member"), int) else None   # a reconnect asks for one interviewer only
+    try: return JsonResponse(live.mint(s, only=member) if member else live.mint(s))
     except Exception: return JsonResponse({"error": "The live voice could not start."}, status=502)
 
 @login_required
@@ -610,13 +613,13 @@ def room_live_turns(request, pk):
     if s.status != "open": return JsonResponse({"error": "This interview has ended."}, status=400)
     try: d = json.loads(request.body or b"{}")
     except ValueError: d = {}
-    lead = agents.session_panel(s)[0]; elapsed = int((timezone.now() - s.started_at).total_seconds()); saved = 0
+    panel = agents.session_panel(s); lead = panel[0]; byid = {i.id: i for i in panel}; elapsed = int((timezone.now() - s.started_at).total_seconds()); saved = 0
     for t in (d.get("turns") or [])[:20]:
         if not isinstance(t, dict): continue
         cand = t.get("role") == "candidate"; build = cand and bool(t.get("build"))
         text = (agents.BUILD_TAG + str(t.get("text", "")).strip())[:9000] if build else " ".join(str(t.get("text", "")).split())[:3000]
         if not text.strip() or text == agents.BUILD_TAG: continue
-        turn = Turn.objects.create(session=s, speaker=None if cand else lead, role="candidate" if cand else "interviewer", text=text, offset=elapsed); saved += 1
+        turn = Turn.objects.create(session=s, speaker=None if cand else byid.get(t.get("speaker"), lead), role="candidate" if cand else "interviewer", text=text, offset=elapsed); saved += 1
         if cand and not build and factcheck.worth_checking(turn.text):
             lastq = s.turns.filter(role="interviewer").order_by("-id").first()
             try: factcheck.start(turn, lastq.text if lastq else "")
