@@ -154,7 +154,7 @@ async function next(answer, tag) {
     const d = await post(`/room/${SID}/turn/`, { answer, tag }); if (ending) return; retryNext = false; current = d; lastSpeaker = d.speaker; qCount = d.n; progress(d);
     logMsg(d.speaker.name + ", " + d.speaker.position, d.text, "i"); caption(d.text); setSpeaker(d.speaker.id); setState(d.speaker.name + " is speaking" + (ALLOW_INT && cap ? " (start talking to interrupt)" : ""));
     if (d.challenge) openBench(d.challenge);
-    playVoice(d.speaker, { turn_id: d.turn_id }, d.text, () => { setSpeaker(null); if (d.end) { setState("The panel is closing the meeting…"); setTimeout(() => finish(false), 900); return; } if (d.intro) { next(null); return; } startAnswer(); });
+    playVoice(d.speaker, { turn_id: d.turn_id }, d.text, () => { setSpeaker(null); if (d.end) { setState(d.reason === "unprofessional" ? "The interviewer is ending the interview…" : "The panel is closing the meeting…"); setTimeout(() => finish(false, d.reason), 900); return; } if (d.intro) { next(null); return; } startAnswer(); });
   } catch (e) { toast(e.message, true); phase = "error"; retryNext = true; $("send").disabled = false; setState("Something failed. Press Done answering to retry."); }
 }
 function startAnswer(fromBarge) {
@@ -224,12 +224,17 @@ $("typed").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftK
 /* ---------- hands-on task: the panel sets something to build, done on this page ---------- */
 const LANG_NOTE = { javascript: "Checks run in your browser", python: "Not run here: the panel reads it", java: "Not run here: the panel reads it", cpp: "Not run here: the panel reads it", sql: "Not run here: the panel reads it", other: "Not run here: the panel reads it" };
 function openBench(ch) {
-  BENCH = ch; lastRun = null; const code = ch.format === "code"; $("live").classList.add("build"); $("b-title").textContent = ch.title; $("b-brief").textContent = ch.brief; $("b-res").innerHTML = "";
+  BENCH = ch; lastRun = null; const code = ch.format === "code"; $("live").classList.add("build"); $("b-title").textContent = ch.title; renderBrief(ch); $("b-res").innerHTML = "";
   $("b-code").value = ch.starter || ""; $("b-code").classList.toggle("prose", !code); $("b-code").placeholder = code ? "// Write your solution here" : "Write your answer here";
   $("b-lang").style.display = $("b-run").style.display = code ? "" : "none"; $("b-lang").value = "javascript"; langNote(); $("b-run").disabled = false;
   benchEnd = Date.now() + ch.minutes * 60000; clearInterval(benchT);
   benchT = setInterval(() => { const left = Math.max(0, Math.round((benchEnd - Date.now()) / 1000)), c = $("b-clock"); c.textContent = "Suggested time left: " + Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0"); c.classList.toggle("low", left < 60); if (left <= 0) { clearInterval(benchT); toast("Time is up for the task. Submit what you have."); } }, 500);
   setTimeout(() => $("b-code").focus(), 600); icons();
+}
+function renderBrief(ch) {   // the task as short labelled lines, easy to scan: Scenario, Your task, Input, Output, Example, Note
+  const box = $("b-brief"); box.textContent = "";
+  const parts = ch.parts && ch.parts.length ? ch.parts : [{ label: "", text: ch.brief }];
+  parts.forEach(p => { const row = document.createElement("div"); row.className = "b-row"; if (p.label) { const l = document.createElement("b"); l.textContent = p.label; row.appendChild(l); } const t = document.createElement(/^(Input|Output|Example)$/.test(p.label) ? "code" : "span"); t.textContent = p.text; row.appendChild(t); box.appendChild(row); });
 }
 function langNote() { const l = $("b-lang").value, js = l === "javascript"; $("b-note").textContent = BENCH && BENCH.format === "code" ? LANG_NOTE[l] : "Written task: the panel reads your answer"; $("b-run").disabled = !js || !(BENCH && BENCH.tests && BENCH.tests.length); }
 $("b-lang").addEventListener("change", langNote);
@@ -286,28 +291,28 @@ async function leaveRoom() {   // the interviewers leave one by one, like people
   }
   await sleep(calm ? 150 : 600);
 }
-function showEnding() {
+function showEnding(title) {
   if ($("rm-end")) return; const o = document.createElement("div"); o.id = "rm-end"; o.setAttribute("role", "status"); o.setAttribute("aria-live", "polite");
-  o.innerHTML = '<div class="orb"><span class="ring"></span><span class="ring r2"></span><span class="core"></span></div><b>The interview has ended</b><p id="rm-end-tx"></p><div class="dots"><i></i><i></i><i></i></div>';
-  document.body.appendChild(o); requestAnimationFrame(() => o.classList.add("on"));
+  o.innerHTML = '<div class="orb"><span class="ring"></span><span class="ring r2"></span><span class="core"></span></div><b id="rm-end-h"></b><p id="rm-end-tx"></p><div class="dots"><i></i><i></i><i></i></div>';
+  document.body.appendChild(o); $("rm-end-h").textContent = title || "The interview has ended"; requestAnimationFrame(() => o.classList.add("on"));
   let i = 0; const tx = $("rm-end-tx"); tx.textContent = "The panel is preparing your report…";
   clearInterval(endT); endT = setInterval(() => { tx.textContent = END_MSGS[i % END_MSGS.length]; i++; }, 2600);
 }
 function hideEnding() { clearInterval(endT); const o = $("rm-end"); if (o) { o.classList.remove("on"); setTimeout(() => o.remove(), 500); } }
 function endByUser() { finish(true); }   // End interview: the panel leaves, then the animation plays until the report is ready
-async function finish(byUser) {
+async function finish(byUser, reason) {   // reason: why the interviewer ended it ("finished" or "unprofessional"), empty when the clock or the candidate did
   if (ending) return; ending = true; phase = "idle"; Vis.stop(); clearInterval(answerTimer); clearInterval(benchT); stopSpeech(); setSpeaker(null); $("limitbox").textContent = ""; $("live").classList.remove("build");
   document.querySelectorAll(".rm-ctl .rm-btn").forEach(b => b.disabled = true); $("typebox").classList.remove("show");
-  setState(byUser ? "You ended the interview." : "The interview has ended.");
+  setState(byUser ? "You ended the interview." : reason === "unprofessional" ? "The interviewer ended the interview." : "The interview has ended.");
   const liveStop = (typeof Live !== "undefined" && Live.active) ? Live.stop() : Promise.resolve();   // saves the last words while the panel leaves
-  await leaveRoom(); showEnding(); const shown = sleep(4000); await liveStop; clearInterval(clockT);
+  await leaveRoom(); showEnding(byUser ? "The interview has ended" : reason === "unprofessional" ? "The interviewer ended the interview" : "The interview has ended"); const shown = sleep(4000); await liveStop; clearInterval(clockT);
   if (cap) { try { await cap.close(); } catch (e) { } cap.destroy(); }
   const stop = new Promise(r => { if (rec && rec.state !== "inactive") { rec.onstop = r; rec.stop(); } else r(); }); await stop;
   let upload = Promise.resolve();   // the recording uploads while the evaluation runs; the report opens as soon as both are done (the upload is waited for at most 3 s more)
   if (chunks.length) { const f = new FormData(); f.append("rec", new Blob(chunks, { type: "video/webm" }), "session.webm"); upload = post(`/room/${SID}/recording/`, f, true).catch(() => { }); }
   if (stream) stream.getTracks().forEach(t => t.stop());
   try {
-    const d = await post(`/room/${SID}/finish/`, { frames: FRAMES, camera: Vis.summary() });
+    const d = await post(`/room/${SID}/finish/`, { frames: FRAMES, camera: Vis.summary(), reason: reason || "" });
     if (d.job) await pollJob(d.job, () => { }, 350); await Promise.race([upload, new Promise(r => setTimeout(r, 3000))]);
     await shown; $("rm-end").classList.add("done"); await sleep(700); location.href = d.url;   // the animation always plays to its end before the report opens
   } catch (e) { toast(e.message, true); hideEnding(); ending = false; document.querySelectorAll(".rm-ctl .rm-btn").forEach(b => b.disabled = false); }

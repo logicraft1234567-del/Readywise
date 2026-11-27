@@ -70,7 +70,7 @@ def finalize_task(sid, frames, camera=None):
         if camera: s.vision = {**(s.vision or {}), "camera": camera}
         s.status = "done"; s.save(update_fields=["status"] + (["vision"] if (v or camera) else []))   # the report opens now; the bookkeeping below only touches the next session's plan
         if ev is not None:
-            try: logic.update_memory(s.user or s.workspace.user, ev.scores, notes); logic.adjust_plan(s.workspace); panelplan.adapt_after_session(s.workspace)
+            try: logic.update_memory(s.workspace.user, ev.scores, notes); logic.adjust_plan(s.workspace); panelplan.adapt_after_session(s.workspace)
             except Exception: pass
     except Exception:
         Session.objects.filter(pk=sid).update(status="error"); raise

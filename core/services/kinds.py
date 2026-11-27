@@ -325,38 +325,7 @@ PROFILES = {
    eval="technical accuracy, justification of decisions, standards knowledge, troubleshooting method",
    weights=dict(technical=10, system_design=6, communication=5, behavioural=2, strategic=3, company=2)),
 }
-PROFILES["hackathon"] = dict(PROFILES["pitch"], label="Hackathon presentation", icon="trophy", blurb="Demo and judges' Q&A for your team's project", company_label="Your project name",
-    position_label="Hackathon and track, for example ETHGlobal AI track", doc_label="Project slides or one-pager", duration=10, format="Demo + judges' Q&A", panel=["Alex", "Victoria", "Tom"],
-    fields=[F("problem", "Problem", "What problem does your project solve, and for whom?", "text", "e.g. Small shops lose sales because they cannot answer customers after hours", sec=OPP, req=True),
-            F("solution", "Solution", "What did you build, in one sentence?", "text", sec=OPP),
-            F("tech", "How it is built", "The main tools and technology, and what you built during the event", "textarea", "e.g. Next.js front end, Python API, GPT-based answers, built in 36 hours", sec=OPP),
-            F("demo", "The demo", "What will the judges see in your demo?", "textarea", "Walk through the screens or steps, and what works for real versus what is mocked", sec=OPP, req=True),
-            F("users", "Users", "Who is it for, and how do you know they need it?", "textarea", "Interviews, a survey, a pilot, or your own experience", sec=YOU),
-            F("rivals", "Alternatives", "What exists already, and why is yours better for this case?", "textarea", sec=YOU),
-            F("team", "Team", "Who is on the team and what did each person build?", "textarea", sec=YOU),
-            F("next", "After the hackathon", "What happens next with the project?", "textarea", "e.g. Pilot with 5 shops in March, then apply to an accelerator", sec=INT),
-            F("risk", "Biggest weakness", "The weakest part of the project", "text", sec=INT), WORRY],
-    guide="Hackathon judging panel. Probe the problem and who has it, what really works in the demo versus what is faked, technical choices and trade-offs, what was built during the event, originality against existing tools, the team's split of work, and what happens after the event. Fair but direct; ask for specifics and for a live walk-through of how it works.",
-    research="the hackathon's theme, tracks, judging criteria and past winners, similar projects and tools, and the questions judges ask teams",
-    plan=[P("The hackathon and its judges", "The hackathon's theme and tracks, the judging criteria and their weights, who the judges are and their backgrounds, prizes, and what past winning projects had in common."),
-          P("Similar projects and tools", "Existing products and past hackathon projects that solve the same problem, how they differ, and what makes a new project stand out."),
-          P("The technology and its limits", "The main technologies this kind of project uses, common technical pitfalls, and the trade-offs judges ask about."),
-          P("Judges' questions", "The questions and objections judges raise with teams at hackathons like this, and what a convincing answer contains.")],
-    sections=[S("event", "The hackathon and its judges", "landmark", "Theme, tracks, judging criteria, past winners"),
-              S("competition", "Similar projects and your edge", "swords", "What exists already and where yours is different"),
-              S("tech", "Technical trade-offs", "cpu", "Choices judges will ask you to defend"),
-              S("objections", "Likely judge questions and strong answers", "shield-alert", "What judges push on and what a convincing reply contains"),
-              S("reports", "What people who did this say", "messages-square", "Experiences, real questions and tips from forums, write-ups and videos. Name the source and how many separate accounts agree; label as candidate-reported"),
-              S("fit", "Gaps in your presentation right now", "target", "Vague claims, missing demo steps and unanswered questions")],
-    evidence=dict(where="Devpost, hackathon winners' write-ups, Reddit (r/hackathon), Hacker News, and organisers' judging guides", video="hackathon demo judging tips; what judges ask at hackathons; winning hackathon pitch at {position}"),
-    anim=dict(sig="bars", c=["#f59e0b", "#ef4444", "#8b5cf6"], title="Studying the judges and rivals", speed=1.0),
-    eval="clarity of the problem, a demo that works, technical depth and honest trade-offs, originality, teamwork and how well each person can explain their part",
-    weights=dict(technical=7, system_design=5, communication=8, behavioural=4, strategic=6, company=3))
-ORDER = ["startup", "employment", "internship", "graduate", "admission", "scholarship", "visa", "fellowship", "pitch", "hackathon", "certification"]
-TEAM_KINDS = ("pitch", "hackathon")   # presented by a team: the creator coordinates and can invite up to four more people
-for _k in TEAM_KINDS:   # the competitor step first works out what the product really is, then finds and double-checks companies that actually compete with it
-    for _st in PROFILES[_k]["plan"]:
-        if "ompetitor" in _st["label"] or "imilar projects" in _st["label"]: _st["deep"] = "competitors"
+ORDER = ["startup", "employment", "internship", "graduate", "admission", "scholarship", "visa", "fellowship", "pitch", "certification"]
 
 
 # ---------- required documents ----------
@@ -373,7 +342,6 @@ DOCS = {
     "fellowship": D("cv", "CV or research summary", "Can I see your CV or a summary of your research?", "Your research, publications and experience decide which questions a fellowship panel asks. Upload it or paste the text.", "Paste your CV or research summary here.", "Drop your CV here, or click to choose", True),
     "visa": D("application", "Supporting documents", "What documents will you show the officer?", "List or paste what you will bring: offer or invitation letter, who pays and the proof, your plans back home, your travel history. Please leave out passport and bank account numbers.", "e.g. Offer letter from the University of Leeds, tuition paid, sponsor is my father (bank statement), I return to my family business in Lagos.", "Drop your documents summary here"),
     "pitch": D("deck", "Pitch deck", "Can I see your pitch deck?", "Investors' questions come from what is on your slides, so this is how I make them realistic. Upload it or paste the text from the slides.", "Paste the text of your deck or one-pager here.", "Drop your pitch deck here, or click to choose"),
-    "hackathon": D("deck", "Project slides or one-pager", "Can I see your slides or a one-page description of the project?", "Judges' questions come from what you show, so this is how I make them realistic. Upload it or paste the text.", "Paste the text of your slides or one-pager here.", "Drop your slides here, or click to choose"),
     "certification": D("cv", "Your background", "Can I see your CV, or a summary of your related experience?", "What you already know decides which exam topics to press you on. Upload your CV or paste a few lines about your experience and study so far.", "Paste your CV or a short summary of your experience here.", "Drop your CV here, or click to choose", True),
 }
 def doc(kind): return DOCS.get(kind) or DOCS["employment"]
@@ -399,7 +367,7 @@ def research_steps(kind):
 # The new-interview flow asks in three parts: your application, why you chose it, then your documents.
 # These are the questions that belong to the second part (the reasons), in the order they are asked.
 WHY_KEYS = {"startup": ["why"], "employment": ["why"], "internship": ["why"], "graduate": ["sector"], "admission": ["statement", "whyuni"],
-            "scholarship": ["goal", "why"], "visa": ["purpose", "ties"], "fellowship": ["fit"], "pitch": ["team"], "hackathon": ["team"], "certification": ["motive"]}
+            "scholarship": ["goal", "why"], "visa": ["purpose", "ties"], "fellowship": ["fit"], "pitch": ["team"], "certification": ["motive"]}
 
 # If the quick document check cannot reach the web or the AI, these are asked instead (the main document, such as the CV, is asked separately).
 DEFAULT_DOCS = {
@@ -412,6 +380,5 @@ DEFAULT_DOCS = {
     "visa": [("admission_letter", "Admission or invitation letter", "The officer checks why you are travelling.", True), ("funds", "Proof of funds or sponsor letter", "Funding is checked closely.", True), ("ties", "Proof of ties to your home country", "Job letter, property or family ties.", True)],
     "fellowship": [("proposal", "Research proposal", "The panel questions your project.", True), ("references", "Reference letters", "Referees are often named.", False)],
     "pitch": [("financials", "Financial model or key numbers", "Investors test your numbers.", True), ("traction", "Traction evidence (metrics, pilots, letters of intent)", "Proof beats claims.", False)],
-    "hackathon": [("rules", "Hackathon rules and judging criteria", "Judges score against these, so your questions will too.", True), ("repo", "Repository or demo link notes", "Judges ask how it really works.", False)],
     "certification": [("exam_guide", "Official exam guide or syllabus", "Shows the domains that are tested.", True)],
 }

@@ -1,4 +1,4 @@
-{% load static %}<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+{% load static %}<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>{% block title %}ReadyWise{% endblock %}</title><link rel="icon" type="image/svg+xml" href="{% static 'img/mark.svg' %}">
 <script src="{% static 'js/theme.js' %}"></script>
 <link rel="stylesheet" href="{% static 'css/fonts.css' %}">
@@ -12,39 +12,42 @@
 <a class="btn solid justify-center" href="{% url 'ws_new' %}" style="margin-bottom:.4rem"><i data-lucide="plus" width="16"></i>New interview</a>
 <div class="grp">Workspace</div>
 <a class="nl {% if n == 'dashboard' %}on{% endif %}" href="{% url 'dashboard' %}"><i data-lucide="layout-dashboard" width="17"></i><span class="t">Dashboard</span></a>
-<a class="nl {% if n == 'analysis' %}on{% endif %}" href="{% url 'analysis' %}"><i data-lucide="chart-column" width="17"></i><span class="t">Analysis</span></a>
 <a class="nl {% if n == 'tasks' %}on{% endif %}" href="{% url 'tasks' %}"><i data-lucide="list-checks" width="17"></i><span class="t">Tasks</span><span class="nl-n" id="side-n" {% if not due_count %}hidden{% endif %}>{{ due_count }}</span></a>
 <a class="nl {% if n == 'calendar' %}on{% endif %}" href="{% url 'calendar' %}"><i data-lucide="calendar-days" width="17"></i><span class="t">Calendar</span></a>
+<a class="nl {% if n == 'analytics' %}on{% endif %}" href="{% url 'analytics' %}"><i data-lucide="chart-column" width="17"></i><span class="t">Analytics</span></a>
 <a class="nl {% if n == 'interviewers' or n == 'interviewer_new' %}on{% endif %}" href="{% url 'interviewers' %}"><i data-lucide="users" width="17"></i><span class="t">Interviewers</span></a>
 <a class="nl {% if n == 'profile' %}on{% endif %}" href="{% url 'profile' %}"><i data-lucide="user-round" width="17"></i><span class="t">Profile and CV</span></a>
 <a class="nl {% if n == 'guide' %}on{% endif %}" href="{% url 'guide' %}"><i data-lucide="book-open" width="17"></i><span class="t">How to use ReadyWise</span></a>
 <div class="grp">My interviews</div>
 {% for w in side_ws %}<a data-s="{{ w.title|lower }} {{ w.company|lower }}" class="nl {% if n == 'ws' and request.resolver_match.kwargs.pk == w.pk %}on{% endif %}" href="{% url 'ws' w.pk %}"><i data-lucide="folder" width="17"></i><span class="t">{{ w.title }}</span></a>{% empty %}<p class="text-sm px-3" style="color:var(--mut)">Nothing yet. Create your first interview above.</p>{% endfor %}
 <div class="me"><span class="avatar-dot">{{ user.username|first|upper }}</span><div class="flex-1 min-w-0"><div class="font-semibold text-sm truncate">{{ user.username }}</div><a class="text-xs" style="color:var(--mut)" href="{% url 'logout' %}">Log out</a></div></div></aside>
-<main class="main" id="content"><header class="hdr"><div class="hdr-sw"><label class="hdr-search"><i data-lucide="search" width="16"></i><input id="gsearch" type="search" placeholder="Search interviews, tasks, reports" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="srch" aria-autocomplete="list" aria-label="Search interviews, tasks, reports and pages" data-url="{% url 'search' %}"><kbd class="hdr-k" aria-hidden="true">/</kbd></label><div class="srch" id="srch" role="listbox" aria-label="Search results" hidden></div></div><div class="flex-1"></div>{% block actions %}{% endblock %}
+<main class="main" id="content"><header class="hdr"><a class="hdr-logo" href="{% url 'dashboard' %}" aria-label="ReadyWise home"><img src="{% static 'img/mark.svg' %}" alt="" width="28" height="28"></a><button class="theme-btn burger" onclick="document.getElementById('side').classList.toggle('open')" aria-label="Menu"><i data-lucide="menu" width="18"></i></button>
+<div class="hdr-search" id="hs" role="search"><i data-lucide="search" width="16"></i><input id="gsearch" type="search" placeholder="Search interviews, tasks, reports" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-controls="hs-list" aria-autocomplete="list" aria-label="Search interviews, tasks, reports"><kbd class="hs-key" aria-hidden="true">/</kbd><div class="hs-pop" id="hs-list" role="listbox" hidden></div></div><div class="flex-1"></div>{% block actions %}{% endblock %}
 <div class="np-wrap"><button type="button" class="theme-btn" id="bell" aria-haspopup="dialog" aria-expanded="false" aria-controls="notif" title="Notifications" aria-label="Notifications" style="position:relative"><i data-lucide="bell" width="17"></i><span class="badge" id="bell-badge" {% if not due_count %}hidden{% endif %}>{{ due_count }}</span></button>
 <section class="np" id="notif" role="dialog" aria-label="Notifications" hidden><div class="np-h"><b>Notifications</b><button type="button" class="np-link" id="np-alerts">Turn on desktop alerts</button></div><div class="np-list" id="np-list" aria-live="polite"><div class="np-empty">Loading your plan…</div></div><div class="np-f"><a href="{% url 'calendar' %}">Open calendar</a><span style="color:var(--mut)">Tasks can be completed on their day</span></div></section></div>
 <button class="theme-btn" onclick="toggleTheme()" aria-label="Toggle dark mode"><span class="moon"><i data-lucide="moon" width="17"></i></span><span class="sun"><i data-lucide="sun" width="17"></i></span></button>
 <a class="avatar-dot" href="{% url 'profile' %}" title="Profile">{{ user.username|first|upper }}</a></header>
 <script src="{% static 'js/search.js' %}" defer></script>
 {% if messages %}{% for m in messages %}<div class="toast" role="status" style="color:{% if m.tags == 'error' %}var(--bad){% else %}var(--ok){% endif %}">{{ m }}</div>{% endfor %}{% endif %}
-<div class="page">{% block content %}{% endblock %}</div></main></div>
-<nav class="tabbar" aria-label="Main navigation">
-<a class="tb {% if n == 'dashboard' %}on{% endif %}" href="{% url 'dashboard' %}" {% if n == 'dashboard' %}aria-current="page"{% endif %}><span class="pill"><i data-lucide="layout-dashboard" width="21"></i></span><span>Home</span></a>
-<a class="tb {% if n == 'tasks' %}on{% endif %}" href="{% url 'tasks' %}" {% if n == 'tasks' %}aria-current="page"{% endif %}><span class="pill"><i data-lucide="list-checks" width="21"></i><span class="tb-n" id="tab-n" {% if not due_count %}hidden{% endif %}>{{ due_count }}</span></span><span>Tasks</span></a>
-<a class="tb {% if n == 'calendar' %}on{% endif %}" href="{% url 'calendar' %}" {% if n == 'calendar' %}aria-current="page"{% endif %}><span class="pill"><i data-lucide="calendar-days" width="21"></i></span><span>Calendar</span></a>
-<a class="tb {% if n == 'interviewers' or n == 'interviewer_new' %}on{% endif %}" href="{% url 'interviewers' %}" {% if n == 'interviewers' or n == 'interviewer_new' %}aria-current="page"{% endif %}><span class="pill"><i data-lucide="users" width="21"></i></span><span>Interviewers</span></a>
-<button type="button" class="tb {% if n == 'analysis' or n == 'profile' or n == 'guide' or n == 'ws' %}on{% endif %}" id="tb-more" aria-haspopup="dialog" aria-expanded="false" aria-controls="sheet"><span class="pill"><i data-lucide="ellipsis" width="21"></i></span><span>More</span></button>
+<div class="page">{% block content %}{% endblock %}</div></main><nav class="tabbar" aria-label="Main">
+<a class="tab {% if n == 'dashboard' or n == 'ws' or n == 'readiness' or n == 'report' %}on{% endif %}" href="{% url 'dashboard' %}" {% if n == 'dashboard' %}aria-current="page"{% endif %}><span class="tab-i"><i data-lucide="layout-dashboard" width="22"></i></span><span class="tab-t">Home</span></a>
+<a class="tab {% if n == 'tasks' %}on{% endif %}" href="{% url 'tasks' %}" {% if n == 'tasks' %}aria-current="page"{% endif %}><span class="tab-i"><i data-lucide="list-checks" width="22"></i><span class="tab-n" id="tab-n" {% if not due_count %}hidden{% endif %}>{{ due_count }}</span></span><span class="tab-t">Tasks</span></a>
+<a class="tab tab-new {% if n == 'ws_new' %}on{% endif %}" href="{% url 'ws_new' %}"><span class="tab-i"><i data-lucide="plus" width="24"></i></span><span class="tab-t">New</span></a>
+<a class="tab {% if n == 'calendar' %}on{% endif %}" href="{% url 'calendar' %}" {% if n == 'calendar' %}aria-current="page"{% endif %}><span class="tab-i"><i data-lucide="calendar-days" width="22"></i></span><span class="tab-t">Calendar</span></a>
+<button type="button" class="tab {% if n == 'interviewers' or n == 'interviewer_new' or n == 'profile' or n == 'guide' or n == 'analytics' %}on{% endif %}" id="more-btn" aria-haspopup="dialog" aria-expanded="false" aria-controls="more-sheet"><span class="tab-i"><i data-lucide="menu" width="22"></i></span><span class="tab-t">More</span></button>
 </nav>
-<div class="sheet-bg" id="sheet-bg"></div>
-<section class="sheet" id="sheet" role="dialog" aria-label="More" aria-modal="true"><div class="sheet-grip"></div>
-<a class="btn solid justify-center" href="{% url 'ws_new' %}"><i data-lucide="plus" width="16"></i>New interview</a>
-<a class="sheet-l {% if n == 'analysis' %}on{% endif %}" href="{% url 'analysis' %}"><i data-lucide="chart-column" width="18"></i>Analysis</a>
-<a class="sheet-l" href="{% url 'profile' %}"><i data-lucide="user-round" width="18"></i>Profile and CV</a>
-<a class="sheet-l" href="{% url 'guide' %}"><i data-lucide="book-open" width="18"></i>How to use ReadyWise</a>
-{% if side_ws %}<div class="sheet-h">My interviews</div>{% for w in side_ws %}<a class="sheet-l {% if n == 'ws' and request.resolver_match.kwargs.pk == w.pk %}on{% endif %}" href="{% url 'ws' w.pk %}"><i data-lucide="folder" width="18"></i><span class="t">{{ w.title }}</span></a>{% endfor %}{% endif %}
-<div class="sheet-f"><span class="avatar-dot">{{ user.username|first|upper }}</span><b class="text-sm truncate flex-1">{{ user.username }}</b><a class="btn sm" href="{% url 'logout' %}">Log out</a></div></section>
-<script>(function(){const m=document.getElementById("tb-more"),s=document.getElementById("sheet"),g=document.getElementById("sheet-bg");if(!m)return;
-const set=o=>{s.classList.toggle("open",o);g.classList.toggle("open",o);m.setAttribute("aria-expanded",o)};
-m.onclick=()=>set(!s.classList.contains("open"));g.onclick=()=>set(false);s.addEventListener("click",e=>{if(e.target.closest("a"))set(false)});
-document.addEventListener("keydown",e=>{if(e.key==="Escape")set(false)})})()</script>{% endwith %}<aside class="pop" id="rw-pop" role="status" aria-live="polite" hidden></aside></body></html>
+<div class="sheet-bg" id="sheet-bg" hidden></div>
+<section class="sheet" id="more-sheet" role="dialog" aria-modal="true" aria-label="More" hidden>
+<div class="sheet-grip" aria-hidden="true"></div>
+<div class="sheet-me"><span class="avatar-dot">{{ user.username|first|upper }}</span><div class="min-w-0"><b class="truncate" style="display:block">{{ user.username }}</b><small style="color:var(--mut)">Signed in</small></div><button type="button" class="theme-btn" onclick="toggleTheme()" aria-label="Toggle dark mode"><span class="moon"><i data-lucide="moon" width="17"></i></span><span class="sun"><i data-lucide="sun" width="17"></i></span></button></div>
+<a class="sheet-l {% if n == 'analytics' %}on{% endif %}" href="{% url 'analytics' %}"><i data-lucide="chart-column" width="20"></i>Analytics</a>
+<a class="sheet-l {% if n == 'interviewers' or n == 'interviewer_new' %}on{% endif %}" href="{% url 'interviewers' %}"><i data-lucide="users" width="20"></i>Interviewers</a>
+<a class="sheet-l {% if n == 'profile' %}on{% endif %}" href="{% url 'profile' %}"><i data-lucide="user-round" width="20"></i>Profile and CV</a>
+<a class="sheet-l {% if n == 'guide' %}on{% endif %}" href="{% url 'guide' %}"><i data-lucide="book-open" width="20"></i>How to use ReadyWise</a>
+{% if side_ws %}<div class="sheet-g">My interviews</div><div class="sheet-ws">{% for w in side_ws %}<a class="sheet-l" href="{% url 'ws' w.pk %}"><i data-lucide="folder" width="20"></i><span class="truncate">{{ w.title }}</span></a>{% endfor %}</div>{% endif %}
+<a class="sheet-l sheet-out" href="{% url 'logout' %}"><i data-lucide="log-out" width="20"></i>Log out</a>
+</section>
+<script>document.addEventListener("DOMContentLoaded",()=>{const b=document.getElementById("more-btn"),s=document.getElementById("more-sheet"),g=document.getElementById("sheet-bg");if(!b)return;
+const set=o=>{if(o){s.hidden=g.hidden=false;requestAnimationFrame(()=>{s.classList.add("open");g.classList.add("open")});s.querySelector("a,button").focus()}else{s.classList.remove("open");g.classList.remove("open");setTimeout(()=>{s.hidden=g.hidden=true},260);b.focus()}b.setAttribute("aria-expanded",o)};
+b.onclick=()=>set(s.hidden);g.onclick=()=>set(false);document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!s.hidden)set(false)});matchMedia("(min-width:1001px)").onchange=e=>{if(e.matches&&!s.hidden){s.hidden=g.hidden=true;s.classList.remove("open");g.classList.remove("open")}}});</script>
+</div>{% endwith %}<aside class="pop" id="rw-pop" role="status" aria-live="polite" hidden></aside></body></html>

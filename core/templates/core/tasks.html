@@ -1,17 +1,28 @@
 {% extends 'core/app_base.html' %}{% block title %}Tasks: ReadyWise{% endblock %}
 {% block content %}
-<div class="pg-head" style="margin-top:.4rem"><div><h1>Tasks</h1><p>Everything you need to do to get ready, in one list. Missed tasks move forward by themselves.</p></div>
-<form method="get"><select class="field" name="w" aria-label="Show interview" onchange="this.form.submit()" style="padding:.55rem 2rem .55rem .8rem;width:auto;max-width:100%"><option value="">All interviews</option>{% for w in workspaces %}<option value="{{ w.pk }}" {% if sel_ws and sel_ws.pk == w.pk %}selected{% endif %}>{{ w.title|truncatechars:34 }}</option>{% endfor %}</select></form></div>
-{% if has_team %}<div class="type-chips" style="margin-bottom:.8rem"><a class="chip-link" href="?{% if sel_ws %}w={{ sel_ws.pk }}{% endif %}" {% if not whole %}style="border-color:var(--b1)"{% endif %}>My tasks</a><a class="chip-link" href="?team=1{% if sel_ws %}&w={{ sel_ws.pk }}{% endif %}" {% if whole %}style="border-color:var(--b1)"{% endif %}><i data-lucide="users" width="14"></i>Whole team</a></div>{% endif %}
-<div class="strip"><div><small>Due now</small><b>{{ counts.today }}</b></div><div><small>Coming up</small><b>{{ counts.later }}</b></div><div><small>Completed</small><b>{{ counts.done }}</b></div><div><small>Plan completed</small><b>{% if counts.pct is not None %}{{ counts.pct }}%{% else %}-{% endif %}</b></div></div>
-<div class="sec-title"><h2>Due now</h2><span>Do these first</span></div><div id="tk-today" class="tk-sec"></div>
-<div class="sec-title"><h2>Coming up</h2><span>Opens on its day</span></div><div id="tk-later" class="tk-sec"></div>
-<details class="glass rp-d" id="tk-donebox"><summary>Completed<span>{{ counts.done }}</span></summary><div id="tk-done" class="tk-sec"></div></details>
-{{ data|json_script:"tk-data" }}
+<div class="pg-head tk-head"><div><h1>Tasks</h1><p>Your prep, in the order to do it. Tasks you miss move forward automatically.</p></div>
+  <form method="get" class="flex items-center gap-2"><select class="field" name="w" aria-label="Show tasks for" onchange="this.form.submit()" style="padding:.5rem 2rem .5rem .75rem;width:auto"><option value="">All interviews</option>{% for w in workspaces %}<option value="{{ w.pk }}" {% if sel_ws and sel_ws.pk == w.pk %}selected{% endif %}>{{ w.title|truncatechars:34 }}</option>{% endfor %}</select></form></div>
+<div class="strip tk-strip"><div><small>Due today</small><b id="n-today">{{ stats.today }}</b></div><div><small>Coming up</small><b id="n-later">{{ stats.later }}</b></div><div><small>Done this week</small><b id="n-week">{{ stats.week }}</b></div><div><small>Moved forward</small><b>{{ stats.moved }}</b></div></div>
+{% if has_any %}<div class="tk-wrap">
+  <section aria-labelledby="h-today"><div class="sec-title"><h2 id="h-today">Do today</h2><span id="c-today"></span></div><div id="l-today" class="grid gap-2"></div></section>
+  <section aria-labelledby="h-later"><div class="sec-title"><h2 id="h-later">Coming up</h2><span id="c-later"></span></div><div id="l-later"></div></section>
+  <details class="glass rp-d tk-done" id="d-done"><summary>Completed <span id="c-done" style="color:var(--mut);font-weight:400;margin-left:.4rem"></span></summary><div id="l-done" class="grid gap-2"></div></details>
+</div>
+{% else %}<div class="glass pg-empty" style="margin-top:1.25rem;min-height:220px"><div><b>No tasks yet</b>Open an interview and generate its plan. Your daily tasks will appear here.<br><a class="btn solid" style="margin-top:.8rem" href="{% url 'ws_new' %}">New interview</a></div></div>{% endif %}
+{{ tasks_json|json_script:"tasks-data" }}
 <script>document.addEventListener("DOMContentLoaded",()=>{
-  const D=JSON.parse(document.getElementById("tk-data").textContent),E=RW.esc;
-  function group(list){let out="",cur="";list.forEach(t=>{if(t.due!==cur){cur=t.due;out+=`${out?"</div>":""}<div class="tk-day" id="d-${E(t.due)}"><h4 class="plan-day">${E(t.when)}</h4>`}out+=RW.taskHTML(t,{showWs:true})});return out?out+"</div>":""}
-  [["tk-today","today","Nothing is due. Pick what to practise next."],["tk-later","later","Nothing else is planned yet."],["tk-done","done","Nothing completed yet."]].forEach(([id,k,empty])=>{
-    document.getElementById(id).innerHTML=D[k].length?group(D[k]):`<div class="plan-empty">${empty}</div>`});
-  const h=location.hash.slice(1);if(h){const el=document.getElementById(h);if(el)el.scrollIntoView({block:"center"})}
-});</script>{% endblock %}
+  const el=document.getElementById("tasks-data"); if(!el)return; const ALL=JSON.parse(el.textContent),E=RW.esc,$=id=>document.getElementById(id); ALL.forEach(t=>RW.store[t.id]=t);
+  const by=(a,k)=>a.slice().sort((x,y)=>String(x[k]).localeCompare(String(y[k]))||x.id-y.id);
+  function draw(){
+    const today=ALL.filter(t=>!t.done&&t.state==="today"),later=by(ALL.filter(t=>!t.done&&t.state==="later"),"due"),done=ALL.filter(t=>t.done);
+    $("l-today").innerHTML=today.length?today.map(t=>RW.taskHTML(t,{showWs:true})).join(""):`<div class="plan-empty">All clear for today.${later.length?" Your next task opens "+E(later[0].when.toLowerCase())+".":""}</div>`;
+    let h="",cur=""; later.forEach(t=>{ if(t.due!==cur){ if(cur)h+="</div>"; cur=t.due; const d=new Date(t.due+"T00:00").toLocaleDateString(undefined,{day:"numeric",month:"short"}); h+=`<h3 class="tk-day">${E(t.when)} <small>${E(d)}</small></h3><div class="grid gap-2">`; } h+=RW.taskHTML(t,{showWs:true}); });
+    $("l-later").innerHTML=h?h+"</div>":`<div class="plan-empty">Nothing else is planned.</div>`;
+    $("l-done").innerHTML=done.map(t=>RW.taskHTML(t,{showWs:true})).join("");
+    $("c-today").textContent=today.length?today.length+" to do":""; $("c-later").textContent=later.length?later.length+" planned":""; $("c-done").textContent=done.length?"("+done.length+")":"";
+    $("n-today").textContent=today.length; $("n-later").textContent=later.length;
+    const mark=(location.hash.match(/^#t(\d+)$/)||[])[1]; if(mark){ const c=document.querySelector(`[data-card="${mark}"]`); if(c){ const d=c.closest("details"); if(d)d.open=true; c.classList.add("tk-flash"); c.scrollIntoView({block:"center"}); } }
+  }
+  draw(); document.addEventListener("rw:task",()=>draw());
+});</script>
+{% endblock %}

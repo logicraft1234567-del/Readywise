@@ -9,7 +9,7 @@ def test_whole_interview_from_first_word_to_report(db, client, monkeypatch, sett
     settings.FACTCHECK_SECONDS = 5
     logic.ensure_seed(); u = User.objects.create_user("u", password="p"); client.login(username="u", password="p")
     w = Workspace.objects.create(user=u, title="senior backend engineer", kind="employment", company="Acme", position="Senior Backend Engineer", duration=20,
-                                 research={"topics": [{"label": "System design", "importance": 9}], "panel": {"found": True, "count": 1, "roles": ["Engineering manager"], "why": "x", "status": "confirmed"},
+                                 research={"assessment": {"build": "none", "status": "confirmed"}, "topics": [{"label": "System design", "importance": 9}], "panel": {"found": True, "count": 1, "roles": ["Engineering manager"], "why": "x", "status": "confirmed"},
                                            "required_documents": [{"key": "cv_extra", "label": "Portfolio", "why": "work samples", "must": True}]})
     panelplan.allocate(w); s = Session.objects.create(workspace=w); panel = agents.session_panel(s); assert len(panel) == 1
     rub = [{"key": "tech_depth", "name": "Technical depth", "looks_like": "why not just what", "weight": 9}, {"key": "ownership", "name": "Ownership", "looks_like": "what I did", "weight": 6}, {"key": "judgment", "name": "Judgment", "looks_like": "trade-offs", "weight": 5}]
@@ -59,4 +59,4 @@ def test_whole_interview_from_first_word_to_report(db, client, monkeypatch, sett
     assert {c["key"]: c["rating"] for c in ev.competencies} == {"tech_depth": "partial", "ownership": "not_demonstrated", "judgment": "insufficient_evidence"}
     assert ev.checks[0]["truth"].startswith("Postgres 9 reached end of life") and ev.overall <= 62 - 5                      # the wrong fact cost points
     page = client.get(f"/report/{s.pk}/").content.decode()
-    assert f'{ev.overall}<span' in page and "Assessment by competency" in page and "Not enough evidence" in page and "end of life in 2021" in page
+    assert f'<b>{ev.overall}</b>' in page and "Skill-by-skill assessment" in page and "Not enough evidence" in page and "end of life in 2021" in page

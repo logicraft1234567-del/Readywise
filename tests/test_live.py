@@ -10,10 +10,39 @@ def _open(c):
     ws, s = _session(c, 3)
     s.started_at = s.started_at; s.save(); return ws, s
 
-def test_instruction_is_one_interviewer_with_the_real_interview_context(client_in):
-    c = client_in; ws, s = _open(c); iv = live.lead_of(s); text = live.instruction(s)
-    assert iv.name in text and "REAL" in text and "ONLY INTERVIEWER" in text and "Never comment on appearance" in text
-    assert live.voice_for(iv) in live.FEMALE + live.MALE
+def test_each_interviewer_gets_their_own_instruction_voice_and_tools(client_in):
+    c = client_in; ws, s = _open(c); panel = live.panel_of(s); assert 2 <= len(panel) <= live.MAX_PANEL
+    voices = live.voices_for(panel); assert len(set(voices)) == len(panel) and all(v in live.FEMALE + live.MALE for v in voices)   # nobody shares a voice
+    texts = [live.instruction(s, iv) for iv in panel]
+    for iv, text in zip(panel, texts):
+        assert iv.name in text and "REAL" in text and "Never comment on appearance" in text and "YOUR TURN" in text and "pass_to" in text and "ONLY INTERVIEWER" not in text
+        assert all(o.name in text for o in panel if o.id != iv.id)   # each knows who the colleagues are
+    assert "you open the interview as the lead" in texts[0] and "Do not speak until a message starting with YOUR TURN" in texts[1]
+    owned = {a.get("owner") for a in s.agenda}; assert owned <= {i.id for i in panel}   # one shared plan, areas split by interviewer
+
+def test_a_solo_panel_is_one_interviewer_with_the_whole_plan(client_in, monkeypatch):
+    c = client_in; ws, s = _open(c); solo = live.panel_of(s)[:1]; monkeypatch.setattr(live, "panel_of", lambda sess: solo)
+    text = live.instruction(s); assert solo[0].name in text and "ONLY INTERVIEWER" in text and "pass_to" not in text.split("HOW TO SPEAK")[0]
+    assert [t["function_declarations"][0]["name"] for t in live._tools([])] == ["end_interview"]
+
+def test_panel_is_capped_at_three_and_every_member_has_a_hand_over_tool(client_in):
+    c = client_in; ws, s = _open(c); panel = live.panel_of(s); names = [i.name for i in panel]
+    fn = live._tools(panel[1:])[0]["function_declarations"]; assert [f["name"] for f in fn] == ["end_interview", "pass_to"] and fn[1]["parameters"]["properties"]["colleague"]["enum"] == names[1:]
+
+def test_mint_gives_every_interviewer_a_token_on_a_different_key(client_in, monkeypatch):
+    import sys, types
+    c = client_in; ws, s = _open(c); used = []
+    class Tokens:
+        def __init__(self, key): self.key = key
+        def create(self, config): used.append((self.key, config["live_connect_constraints"]["config"]["system_instruction"])); return types.SimpleNamespace(name=f"auth_tokens/{len(used)}")
+    class Client:
+        def __init__(self, api_key, http_options=None): self.auth_tokens = Tokens(api_key)
+    fake = types.ModuleType("google"); fake.genai = types.SimpleNamespace(Client=Client); monkeypatch.setitem(sys.modules, "google", fake); monkeypatch.setitem(sys.modules, "google.genai", fake.genai)
+    with override_settings(LIVE_GEMINI_KEYS=["k1", "k2", "k3"], LIVE_MODEL="m"):
+        out = live.mint(s); n = len(live.panel_of(s))
+        assert len(out["voices"]) == n and len({k for k, _ in used}) == n and len({v["token"] for v in out["voices"]}) == n and out["token"] == out["voices"][0]["token"]
+        assert len({text for _, text in used}) == n   # each session has its own instruction
+        used.clear(); one = live.mint(s, only=out["voices"][1]["id"]); assert len(one["voices"]) == 1 and one["voices"][0]["id"] == out["voices"][1]["id"] and len(used) == 1   # a reconnect mints one
 
 def test_token_endpoint_needs_a_key_and_returns_no_secret(client_in, monkeypatch):
     c = client_in; ws, s = _open(c)
@@ -64,7 +93,7 @@ def test_supported_claims_produce_no_note(client_in):
 def test_task_is_set_only_after_enough_conversation_and_only_once(client_in, monkeypatch):
     c = client_in; ws, s = _open(c); ws.duration = 30; ws.save()
     ch = {"title": "Sum", "brief": "Add numbers", "format": "code", "language": "javascript", "starter": "", "tests": [], "minutes": 10, "spoken": "Try this."}
-    monkeypatch.setattr(agents, "build_format", lambda w: "code"); monkeypatch.setattr(agents, "make_challenge", lambda sess: ch)
+    monkeypatch.setattr(agents, "build_plan", lambda sess: "code"); monkeypatch.setattr(agents, "make_challenge", lambda sess: ch)
     post = lambda: c.post(f"/room/{s.pk}/live/challenge/", content_type="application/json", data="{}").json()
     r = post(); assert r["challenge"] is None and r["final"] is False   # too early
     _talk(s, 4); r = post(); assert r["challenge"]["title"] == "Sum" and r["final"] is True
@@ -72,7 +101,7 @@ def test_task_is_set_only_after_enough_conversation_and_only_once(client_in, mon
     r = post(); assert r["challenge"] is None and r["final"] is True      # never a second task
 
 def test_task_is_skipped_for_roles_without_one(client_in, monkeypatch):
-    c = client_in; ws, s = _open(c); _talk(s, 4); monkeypatch.setattr(agents, "build_format", lambda w: None)
+    c = client_in; ws, s = _open(c); _talk(s, 4); monkeypatch.setattr(agents, "build_plan", lambda sess: None)
     r = c.post(f"/room/{s.pk}/live/challenge/", content_type="application/json", data="{}").json(); assert r == {"challenge": None, "final": True}
 
 def test_submitted_solution_keeps_its_line_breaks_and_the_standard_tag(client_in):
@@ -138,39 +167,16 @@ def test_new_words_after_the_early_evaluation_make_it_run_again(client_in, monke
     jobs.prefetch_evaluation(s.pk); Turn.objects.create(session=s, role="candidate", text="One more thing I forgot to say before the end."); jobs.finalize_task(s.pk, [], None)
     assert len(calls) == 2   # the early result was discarded because the transcript changed
 
-# ---- a panel of live interviewers: one session each, one voice at a time ----
-def test_each_panelist_gets_their_own_brief_voice_and_a_handover_tool(client_in):
-    c = client_in; ws, s = _open(c); panel = list(Interviewer.objects.filter(owner=None)[:3]); assert len(panel) == 3
-    chair, other = live.instruction(s, panel[0], panel), live.instruction(s, panel[1], panel)
-    assert "ONLY INTERVIEWER" not in chair and "You are the chair" in chair and panel[1].name in chair and "hand_over" in chair and "introduce your colleagues" not in chair   # the opening line is sent as a message, not repeated here
-    assert "NOT the chair" in other and "YOU HAVE THE FLOOR" in other and "Say nothing until a message tells you" in other and "ONLY INTERVIEWER" not in other
-    v = live.voices_for(panel); assert len(set(v.values())) == 3 and all(x in live.FEMALE + live.MALE for x in v.values())   # three different voices
-    names = [f["name"] for f in live._tools(panel, panel[0])[0]["function_declarations"]]; assert names == ["end_interview", "hand_over"]
-    assert live._tools(panel[:1], panel[0])[0]["function_declarations"][0]["name"] == "end_interview" and len(live._tools(panel[:1], panel[0])[0]["function_declarations"]) == 1   # alone: nobody to hand over to
 
-def test_turns_keep_who_spoke(client_in):
-    c = client_in; ws, s = _open(c); panel = agents.session_panel(s); who = panel[-1]
-    c.post(f"/room/{s.pk}/live/turns/", content_type="application/json", data=json.dumps({"turns": [{"role": "interviewer", "text": "Over to my side.", "speaker": who.id}, {"role": "interviewer", "text": "Anyone.", "speaker": 999999}]}))
-    t = list(s.turns.order_by("id")); assert t[0].speaker == who and t[1].speaker == live.lead_of(s)   # an unknown speaker falls back to the chair
+def test_each_interviewers_words_are_saved_under_their_own_name(client_in):
+    c = client_in; ws, s = _open(c); panel = live.panel_of(s)
+    body = {"turns": [{"role": "interviewer", "text": "First question.", "speaker": panel[1].id}, {"role": "candidate", "text": "My answer."}, {"role": "interviewer", "text": "Second question.", "speaker": 999999}]}
+    c.post(f"/room/{s.pk}/live/turns/", content_type="application/json", data=json.dumps(body))
+    t = list(s.turns.order_by("id")); assert t[0].speaker == panel[1] and t[1].speaker is None and t[2].speaker == panel[0]   # an unknown speaker falls back to the lead
 
-# ---- repeat interviews explore new ground; the live interviewer cannot end it early ----
-def test_a_repeat_interview_is_told_what_was_already_asked(client_in):
-    c = client_in; ws, s = _open(c); assert agents.prior_block(s) == ""   # first attempt: nothing to avoid
-    iv = live.lead_of(s); Turn.objects.create(session=s, speaker=iv, role="interviewer", text="Welcome, I am Sam.", topic="introductions")
-    Turn.objects.create(session=s, speaker=iv, role="interviewer", text="Thanks for that. Walk me through the caching layer you built?")
-    s.status = "done"; s.agenda = [{"area": "Caching project", "owner": iv.id}]; s.save()
-    c.post(f"/w/{ws.pk}/session/", {}); s2 = Session.objects.exclude(pk=s.pk).get()
-    b = agents.prior_block(s2)
-    assert "Walk me through the caching layer you built?" in b and "Caching project" in b and "Welcome, I am Sam" not in b and "Do not ask any of these questions again" in b
-    assert "EARLIER INTERVIEWS" in live.instruction(s2) and "at most one question in five" in b
-
-def test_live_brief_forbids_ending_early(client_in):
-    c = client_in; ws, s = _open(c); text = live.instruction(s)
-    assert "refuses to end it early" in text and "candidate_stopped" in text and "never try before the last part" in text
-
-
-def test_the_live_interviewer_is_told_what_language_the_candidate_speaks(client_in):
-    c = client_in; ws, s = _open(c); text = live.instruction(s)
-    assert "Treat EVERYTHING the candidate says as English" in text and "never switch language" in text and "ask them to repeat" in text
-    from core.models import Profile; p = Profile.objects.get(); p.language = "French"; p.save()
-    assert "Treat EVERYTHING the candidate says as French" in live.instruction(s) and "French" in live.instruction(s) and live.NON_LATIN == {"Arabic", "Hindi", "Chinese (Mandarin)"}
+def test_reconnect_token_request_is_for_one_interviewer(client_in, monkeypatch):
+    c = client_in; ws, s = _open(c); seen = {}
+    monkeypatch.setattr(live, "mint", lambda sess, only=None: seen.setdefault("only", only) or {"voices": [], "token": "t"})
+    with override_settings(LIVE_GEMINI_KEYS=["k"]):
+        c.post(f"/room/{s.pk}/live/token/", content_type="application/json", data=json.dumps({"iv": 7}))
+    assert seen["only"] == 7

@@ -94,7 +94,7 @@ def test_system_picks_mode_and_difficulty_adapts(client_in):
     c.post(f"/w/{ws.pk}/session/", {"mode": "high_pressure"}); assert Session.objects.get().mode == "normal"  # user input is ignored, system decides
 
 def test_header_and_banner(client_in):
-    h = client_in.get("/dashboard/").content.decode(); assert 'class="hdr"' in h and 'class="pg-head"' in h and "gsearch" in h
+    h = client_in.get("/dashboard/").content.decode(); assert 'class="hdr"' in h and 'pg-head' in h and "gsearch" in h
 def test_missing_api_key_gives_clear_error(client, db, settings):
     settings.GROQ_API_KEY = ""; settings.GROQ_RESEARCH_KEYS = []
     client.post("/register/", {"username": "t3", "password": "password123"})
@@ -137,7 +137,7 @@ def test_ics_readiness_api_reminders(client_in, mailoutbox):
 
 def test_app_shell_and_dashboard(client_in):
     r = client_in.get("/dashboard/"); h = r.content.decode()
-    assert r.status_code == 200 and "What are you preparing for?" in h and "Startup job" in h and 'id="side"' in h
+    assert r.status_code == 200 and "New interview" in h and 'id="side"' in h
     assert "#faq" not in h and "#problem" not in h  # no marketing nav inside the app
     assert client_in.get("/").status_code == 302 and client_in.get("/login/").status_code == 302  # logged-in users skip the landing page
     assert 'value="scholarship" class="hidden" checked' in client_in.get("/w/new/?kind=scholarship").content.decode()

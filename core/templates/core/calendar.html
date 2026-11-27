@@ -1,6 +1,6 @@
 {% extends 'core/app_base.html' %}{% block title %}Calendar: ReadyWise{% endblock %}
 {% block content %}
-<div class="pg-head" style="margin-top:.4rem"><div><h1>Calendar</h1><p>Your interview dates. Select a day to see what is on it. Your tasks are on the Tasks page.</p></div></div>
+<div class="pg-head" style="margin-top:.4rem"><div><h1>Calendar</h1><p>Your interview dates. Prep tasks are on the Tasks page.</p></div></div>
 <div class="cal-bar">
   <h2>{{ first|date:"F Y" }}</h2>
   <form method="get" class="flex items-center gap-2"><input type="hidden" name="m" value="{{ first|date:'Y-m' }}">
@@ -12,10 +12,10 @@
   <div>
     <div class="cal" role="grid" aria-label="{{ first|date:'F Y' }}">
       {% for d in weekdays %}<div class="cal-w" role="columnheader">{{ d }}</div>{% endfor %}
-      {% for wk in grid %}{% for c in wk %}<button type="button" class="cd{% if not c.in %} out{% endif %}{% if c.today %} today{% endif %}{% if c.iso == selected %} sel{% endif %}" data-day="{{ c.iso }}" role="gridcell" aria-label="{{ c.date|date:'l j F' }}{% if c.tasks %}, {{ c.tasks|length }} task{{ c.tasks|length|pluralize }}{% endif %}"><span class="n">{{ c.date.day }}</span>
-        <span class="pls">{% for e in c.events %}<span class="pl ev"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22V4M4 4h13l-2 4 2 4H4"/></svg><span class="t">Interview</span></span>{% endfor %}</span></button>{% endfor %}{% endfor %}
+      {% for wk in grid %}{% for c in wk %}<button type="button" class="cd{% if not c.in %} out{% endif %}{% if c.today %} today{% endif %}{% if c.iso == selected %} sel{% endif %}" data-day="{{ c.iso }}" role="gridcell" aria-label="{{ c.date|date:'l j F' }}{% if c.events %}, interview day{% endif %}{% if c.count %}, {{ c.count }} task{{ c.count|pluralize }}{% endif %}"><span class="n">{{ c.date.day }}</span>
+        <span class="pls">{% for e in c.events %}<span class="pl ev"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22V4M4 4h13l-2 4 2 4H4"/></svg><span class="t">Interview</span></span>{% endfor %}{% if c.count %}<span class="pl-more">{{ c.count }} task{{ c.count|pluralize }}</span>{% endif %}</span></button>{% endfor %}{% endfor %}
     </div>
-    <div class="cal-key"><a href="{% if sel_ws %}{% url 'plan_ics' sel_ws.pk %}{% elif workspaces %}{% url 'plan_ics' workspaces.0.pk %}{% else %}#{% endif %}" style="margin-left:auto;color:var(--mut)">Export to another calendar (.ics)</a></div>
+    <div class="cal-key"><span class="a"><i></i>Interview day</span><span><i></i>Prep tasks planned (see Tasks)</span><a href="{% if sel_ws %}{% url 'plan_ics' sel_ws.pk %}{% elif workspaces %}{% url 'plan_ics' workspaces.0.pk %}{% else %}#{% endif %}" style="margin-left:auto;color:var(--mut)">Export to another calendar (.ics)</a></div>
   </div>
   <aside class="day-panel" id="day-panel" aria-live="polite"></aside>
 </div>
@@ -25,11 +25,11 @@ document.addEventListener("DOMContentLoaded",()=>{
   const D=JSON.parse(document.getElementById("days-data").textContent),panel=document.getElementById("day-panel"),E=RW.esc;
   function show(iso){
     document.querySelectorAll(".cd").forEach(c=>c.classList.toggle("sel",c.dataset.day===iso));
-    const d=D[iso]||{tasks:[],events:[],label:new Date(iso+"T00:00").toLocaleDateString(undefined,{weekday:"long",day:"numeric",month:"long"})};
+    const d=D[iso]||{count:0,events:[],label:new Date(iso+"T00:00").toLocaleDateString(undefined,{weekday:"long",day:"numeric",month:"long"})};
     let h=`<h3>${E(d.label)}</h3>`;
     d.events.forEach(e=>h+=`<div class="day-ev">${RW.I.flag}<span>${E(e.title)}: interview day</span></div>`);
-    if(!d.events.length) h+=`<div class="plan-empty">No interview on this day.</div>`;
-    if(d.tasks.length) h+=`<a class="day-ev" href="/tasks/#d-${E(iso)}" style="text-decoration:none">${d.tasks.length} task${d.tasks.length>1?"s":""} planned. Open on the Tasks page</a>`;
+    if(d.count)h+=`<a class="day-tasks" href="/tasks/${location.search.match(/[?&]w=\d+/)?"?"+location.search.match(/w=\d+/)[0]:""}"><span><b>${d.count} prep task${d.count>1?"s":""}</b> planned</span><span>Open Tasks</span></a>`;
+    if(!d.events.length&&!d.count)h+=`<div class="plan-empty">Nothing planned for this day.</div>`;
     panel.innerHTML=h;
     history.replaceState(null,"",location.pathname+"?"+new URLSearchParams({...Object.fromEntries(new URLSearchParams(location.search)),d:iso}));
   }

@@ -24,8 +24,6 @@
       <label><input type="checkbox" id="vconsent"><span>Let ReadyWise analyse up to 5 camera snapshots for presentation feedback. They are sent to Groq and not stored.</span></label>
       <label><input type="checkbox" id="liveconsent"><span><b>Live voice interviewer (free, beta).</b> Your microphone audio and, while your camera is on, a camera picture about once a second are streamed to Google's Gemini service during the interview. On Google's free tier Google may use this data to improve its products. ReadyWise keeps only the written transcript (and a recording only if you ticked the recording option). Leave this unticked to use the standard interview.</span></label>
     </div>
-    {% if ask_build %}<div class="rm-row" style="display:block"><b>Short hands-on task?</b><div class="text-sm" style="opacity:.85;margin:.2rem 0 .4rem">Research could not confirm whether this interview includes a practical task. Should the panel give you a quick one (about 5 minutes)?</div><div class="rm-opts" style="margin:0"><label><input type="radio" name="buildpref" value="yes" {% if build_pref == "yes" %}checked{% endif %}><span>Yes, include one</span></label><label><input type="radio" name="buildpref" value="no" {% if build_pref != "yes" %}checked{% endif %}><span>No, questions only</span></label></div></div>
-    <script>document.querySelectorAll("[name=buildpref]").forEach(r=>r.addEventListener("change",()=>{post("/room/{{ s.pk }}/build/",{pref:r.value}).catch(()=>{})}))</script>{% endif %}
     <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.3rem"><button class="rm-btn" onclick="checkDevices()"><i data-lucide="mic" width="16"></i>Check camera and microphone</button><button class="rm-btn go" id="go" onclick="begin()"><i data-lucide="play" width="16"></i>Join interview</button></div>
   </div>
 </section>
@@ -41,7 +39,7 @@
       <div class="rm-stage" id="stage"></div>
       <div class="rm-me-pip" id="pip"><video id="me" autoplay muted playsinline></video><div class="rm-nocam"><i data-lucide="video-off" width="28"></i><span>Camera off</span></div><div class="chip" id="vchip">Camera off</div><div class="rm-plate"><div class="who"><b>You</b></div><span class="rm-state" id="mestate">Ready</span></div></div>
     </div>
-    <div class="rm-bench" id="bench"><div class="rm-brief"><h3 id="b-title"></h3><p id="b-brief"></p><div class="clock" id="b-clock"></div></div>
+    <div class="rm-bench" id="bench"><div class="rm-brief"><h3 id="b-title"></h3><div id="b-brief" class="b-brief"></div><div class="clock" id="b-clock"></div></div>
       <div class="rm-work"><div class="rm-wbar"><select id="b-lang" aria-label="Language"><option value="javascript">JavaScript (checks run here)</option><option value="python">Python</option><option value="java">Java</option><option value="cpp">C++</option><option value="sql">SQL</option><option value="other">Other</option></select><span class="grow" id="b-note"></span><button class="rm-btn" id="b-run" onclick="runChecks()"><i data-lucide="play" width="14"></i>Run checks</button><button class="rm-btn go" onclick="submitBuild()"><i data-lucide="send" width="14"></i>Submit solution</button></div>
       <textarea class="rm-code" id="b-code" spellcheck="false" autocapitalize="off" aria-label="Your solution"></textarea><div class="rm-res" id="b-res" aria-live="polite"></div></div></div>
     <div class="rm-cap" aria-live="polite"><p id="cap"></p></div>

@@ -5,7 +5,7 @@ CATS = [("technical","Technical"),("system_design","System design"),("communicat
         ("behavioural","Behavioural"),("strategic","Strategic thinking"),("company","Company knowledge")]
 CAT_LABEL = dict(CATS)
 KINDS = [("startup","Startup job"),("employment","Corporate job"),("internship","Internship"),("graduate","Graduate programme"),("admission","University admission"),
-         ("scholarship","Scholarship"),("visa","Visa practice"),("fellowship","Fellowship"),("pitch","Investor pitch"),("hackathon","Hackathon presentation"),("certification","Certification")]
+         ("scholarship","Scholarship"),("visa","Visa practice"),("fellowship","Fellowship"),("pitch","Investor pitch"),("certification","Certification")]
 LEVELS = [("standard","Standard"),("advanced","Advanced"),("expert","Expert")]
 
 class Profile(models.Model):
@@ -67,13 +67,10 @@ class PrepTask(models.Model):
     completed_at = models.DateTimeField(null=True, blank=True)   # when it was ticked off: drives the progress graphs
     orig_due = models.DateField(null=True, blank=True)           # the day it was first planned for, set when a missed task is moved forward
     query = models.CharField(max_length=160, blank=True, default="")        # a short search phrase for the "read" and "watch" links under the task
-    assignee = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name="assigned_tasks")   # team workspaces: who does this task (empty = the workspace owner)
-    team_copy = models.BooleanField(default=False)   # a practice task copied so every team member does their own
     class Meta: ordering = ["due", "-priority", "id"]
 
 class Session(models.Model):
     workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="sessions")
-    user = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name="team_sessions")   # who sat this interview (empty = the workspace owner)
     mode = models.CharField(max_length=20, default="normal")  # normal/challenging/high_pressure/executive/unknown
     started_at = models.DateTimeField(auto_now_add=True); ended_at = models.DateTimeField(null=True, blank=True)
     recording = models.FileField(upload_to="recordings/", null=True, blank=True)
@@ -100,6 +97,7 @@ class Evaluation(models.Model):
     competencies = models.JSONField(default=list, blank=True)   # per competency: rating, evidence, missing evidence, confidence, reason
     unverified = models.JSONField(default=list, blank=True)     # claims the candidate made that nothing in the interview supported
     overall = models.IntegerField(null=True, blank=True)       # the interview score out of 100
+    plain = models.JSONField(default=dict, blank=True)   # the plain-language report the candidate reads first: headline, what went well, top priorities to improve, next steps
     verdict = models.CharField(max_length=40, blank=True, default=""); checks = models.JSONField(default=list, blank=True)   # facts the candidate stated that the online check found wrong or unsupported
 
 class MemoryItem(models.Model):
@@ -110,22 +108,3 @@ class MemoryItem(models.Model):
 
 class Contact(models.Model):
     name = models.CharField(max_length=80); email = models.EmailField(); message = models.TextField(); created = models.DateTimeField(auto_now_add=True)
-
-
-class WorkspaceMember(models.Model):
-    """A person on a team workspace (investor pitch, hackathon). The creator is the coordinator; up to five people in all."""
-    workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="members")
-    user = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name="team_memberships")
-    email = models.EmailField(); role = models.CharField(max_length=12, default="member")        # coordinator / member
-    status = models.CharField(max_length=10, default="invited")                                  # invited / accepted / declined
-    part = models.TextField(blank=True)                                                         # what this person will present
-    invited_at = models.DateTimeField(auto_now_add=True); responded_at = models.DateTimeField(null=True, blank=True)
-    class Meta: unique_together = [("workspace", "email")]; ordering = ["role", "id"]
-
-class TeamSlot(models.Model):
-    """A time the team could meet for the interview. Members mark when they are free; the coordinator confirms one."""
-    workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="slots")
-    start = models.DateTimeField(); proposed_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
-    free = models.JSONField(default=list, blank=True)      # user ids who can make it
-    chosen = models.BooleanField(default=False)
-    class Meta: ordering = ["start"]

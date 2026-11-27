@@ -124,7 +124,7 @@
 
 /* ---------- full screen: once the interview has started nothing else is on the page ---------- */
 body.in-room{overflow:hidden}
-body.in-room .side,body.in-room .hdr,body.in-room .skip,body.in-room .toast{display:none!important}
+body.in-room .side,body.in-room .tabbar,body.in-room .sheet,body.in-room .sheet-bg,body.in-room .hdr,body.in-room .skip,body.in-room .toast{display:none!important}
 body.in-room .app,body.in-room .main,body.in-room .page{display:block;padding:0;margin:0;max-width:none;width:100%}
 body.in-room .rm{position:fixed;inset:0;z-index:300;border:0;border-radius:0;box-shadow:none;width:100vw;height:100dvh}
 body.in-room .rm-live{height:100dvh;min-height:0}
@@ -197,3 +197,8 @@ body.in-room .rm-live{height:100dvh;min-height:0}
 @keyframes rmEndFade{0%,100%{opacity:.55}50%{opacity:1}}
 @keyframes rmEndPop{to{transform:scale(1.25);opacity:0}}
 @media (prefers-reduced-motion:reduce){#rm-end .orb .ring,#rm-end .orb .core,#rm-end p,#rm-end .dots i{animation-duration:3.2s}.rm-tile{transition:none}}
+
+/* the hands-on task: short labelled lines */
+.b-brief{display:grid;gap:.55rem;font-size:.92rem;line-height:1.5}
+.b-row{display:grid;gap:.1rem}.b-row b{font-size:.78rem;font-weight:600;color:var(--mut)}
+.b-row code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.86rem;background:var(--chipbg);padding:.3rem .5rem;border-radius:var(--r1);overflow-wrap:anywhere;width:fit-content;max-width:100%}

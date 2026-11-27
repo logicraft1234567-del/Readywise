@@ -157,40 +157,5 @@
 .dash-cols>*{min-width:0}
 @media (min-width:1024px){.dash-cols{grid-template-columns:minmax(0,1fr) minmax(330px,420px)}}
 
-/* dashboard: the first interview is the one to continue, so it carries the accent */
-.glass.feat{border-left:3px solid var(--b1)}
-.an-link{display:inline-flex;align-items:center;gap:.3rem;font-size:.84rem;font-weight:600;color:var(--b1);text-decoration:none}.an-link:hover{text-decoration:underline}
-.type-chips{display:flex;flex-wrap:wrap;gap:.5rem}
-.chip-link{display:inline-flex;align-items:center;gap:.45rem;padding:.5rem .85rem;border-radius:var(--r2);background:var(--surface);border:1px solid var(--line);color:var(--ink2);font-weight:500;font-size:.88rem;text-decoration:none;transition:border-color .2s,box-shadow .2s,color .2s}
-.chip-link svg{color:var(--b1);flex:none}.chip-link:hover{border-color:var(--b1);color:var(--ink);box-shadow:0 0 0 3px var(--soft)}
-
-/* tasks page */
-.tk-sec{display:grid;gap:.6rem;grid-template-columns:minmax(0,1fr)}
-.tk-day{display:grid;gap:.5rem;margin-bottom:.9rem}
-.tasks-card{display:flex;align-items:center;gap:.9rem;text-decoration:none;color:inherit}.tasks-card .ico{margin:0}
-
-/* dashboard: compact spacing, no dead space between blocks */
-.dash .pg-head{margin:.2rem 0 1rem;gap:.7rem 1rem;align-items:center}
-.dash .pg-head h1{font-size:clamp(1.7rem,2.6vw,2.2rem)}.dash .pg-head p{margin-top:.25rem;font-size:.93rem}
-.dash .nudge{margin-bottom:.75rem;padding:.7rem 1rem}
-.dash .strip>div{padding:.75rem 1.1rem}.dash .strip small{margin-bottom:.2rem;font-size:.8rem}.dash .strip b{font-size:1.55rem}
-.dash .dash-cols{margin-top:1rem;gap:1.25rem}
-.dash .sec-title{margin:1.1rem 0 .55rem}.dash .dash-cols>div>.sec-title:first-child{margin-top:0}
-.dash .card{padding:1rem 1.1rem}.dash .pg-card{padding:.9rem 1.1rem}
-.dash .pg-card header{margin-bottom:.5rem}.dash .chart-box{height:200px}.dash .pg-empty{min-height:130px}
-.dash .type-chips{gap:.4rem}.dash .chip-link{padding:.4rem .7rem;font-size:.84rem}
-@media(min-width:1024px){.dash .dash-side{position:sticky;top:1rem}.dash .dash-cols{grid-template-columns:minmax(0,1fr) minmax(300px,360px)}}
-@media(max-width:1000px){.dash .dash-cols{gap:1rem}}
-
-/* team page */
-.tm-m{display:flex;gap:.8rem;align-items:flex-start;padding:.75rem 0;border-top:1px solid var(--line)}.tm-m:first-of-type{border-top:0}
-.tm-av{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--soft);color:var(--b1);font-weight:600;flex:none}
-.tm-n{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem}
-.tm-s{display:block;color:var(--mut);font-size:.8rem;margin-top:.1rem}
-.tm-p{font-size:.9rem;margin-top:.3rem;color:var(--ink2)}.tm-none{color:var(--mut)}
-.tm-inv{display:grid;gap:.5rem;margin-top:.9rem;padding-top:.9rem;border-top:1px solid var(--line)}
-.tm-slot{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;padding:.65rem .8rem;border:1px solid var(--line);border-radius:var(--r2);margin-bottom:.5rem}
-.tm-slot.on{border-color:var(--ok);background:var(--soft)}.tm-slot.past{opacity:.55}
-.tm-add{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.7rem}.tm-add .field{width:auto;flex:1 1 180px}
-.np-act{display:flex;gap:.5rem;margin-top:.6rem}
-.nudge.invite{flex-wrap:wrap}
+/* the bottom tab bar sits under these on phones */
+@media(max-width:1000px){.pop{bottom:calc(var(--tab-h,64px) + env(safe-area-inset-bottom,0px) + .75rem);right:.75rem;left:.75rem;width:auto}body:has(#ws-foot) .pop{bottom:calc(var(--tab-h,64px) + env(safe-area-inset-bottom,0px) + 9rem)}}
