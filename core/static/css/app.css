@@ -413,3 +413,41 @@ details.lq{border-top:1px solid var(--line);padding:.75rem 0}details.lq summary{
 .rp-d{margin-top:.7rem;padding:0}.rp-d>summary{cursor:pointer;list-style:none;padding:1rem 1.25rem;font-weight:600;display:flex;justify-content:space-between;align-items:center;min-height:48px}.rp-d>summary::-webkit-details-marker{display:none}.rp-d>summary::after{content:"+";font-size:1.3rem;color:var(--mut);font-weight:400}.rp-d[open]>summary::after{content:"\2212"}
 .rp-d>*:not(summary){margin-left:1.25rem;margin-right:1.25rem}.rp-d>*:last-child{margin-bottom:1.25rem}
 @media(max-width:640px){.rp-hero{grid-template-columns:minmax(0,1fr)}.rp-score{flex-direction:row;align-items:baseline;gap:.8rem;border-right:0;border-bottom:1px solid var(--line);padding:1.1rem 1.3rem;min-width:0}.rp-score b{font-size:3.4rem}.rp-sk{grid-template-columns:6.5rem minmax(0,1fr) 2rem}.rp-pri>li{padding-left:3.1rem}}
+
+/* competitor cards */
+.cmp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:.8rem}
+.cmp{border:1px solid var(--line);border-radius:var(--r2);padding:.9rem 1rem;background:var(--surface);display:flex;flex-direction:column;gap:.4rem}.cmp header{display:flex;justify-content:space-between;gap:.5rem;align-items:flex-start}.cmp header a{color:inherit}.cmp p{font-size:.86rem;color:var(--ink2)}
+.cmp dl{display:grid;gap:.15rem;font-size:.84rem}.cmp dt{font-size:.74rem;font-weight:600;color:var(--mut);margin-top:.35rem}.cmp dd{margin:0}
+
+/* team page */
+.tm-sec{margin-top:1.6rem;max-width:880px}.tm-sec .sec-title{margin:0 0 .6rem}
+.tm-msgs{display:grid;gap:.4rem;margin-top:1rem;max-width:880px}.tm-msg{padding:.65rem .9rem;border-radius:var(--r2);border:1px solid var(--line);background:var(--surface);font-size:.9rem}.tm-msg.success{border-color:var(--ok)}.tm-msg.error{border-color:var(--bad)}
+.tm-people{display:grid;gap:.6rem}.tm-p{display:flex;gap:.9rem;align-items:flex-start;padding:.9rem 1rem}.tm-p p{margin:.25rem 0 0;font-size:.88rem;color:var(--ink2)}.tm-p small{color:var(--mut)}
+.tm-av{flex:none;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:var(--soft);color:var(--b1);font-weight:700}
+.tm-side{margin-left:auto;display:flex;gap:.5rem;align-items:center;flex:none}
+.tm-form{display:grid;gap:.6rem;padding:1rem 1.1rem;margin-top:.7rem}.tm-form label{display:grid;gap:.15rem}.tm-form label small{color:var(--mut);font-size:.82rem}.tm-form .btn{justify-self:start}
+.tm-ok{display:flex;gap:.7rem;align-items:center;padding:.85rem 1rem;margin-bottom:.7rem;border-color:var(--ok)}.tm-ok svg{color:var(--ok);flex:none}
+.tm-slots{display:grid;gap:.6rem}.tm-slot{display:flex;gap:1rem;justify-content:space-between;align-items:center;padding:.85rem 1rem}.tm-slot.on{border-color:var(--ok)}.tm-slot small{display:block;color:var(--mut);font-size:.82rem}.tm-who{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.4rem}.tm-vote{display:flex;gap:.4rem;flex:none}
+.chip.ok{border-color:var(--ok);color:var(--ok)}.chip.who{gap:.25rem}
+.tm-dt{display:flex;gap:.5rem;flex-wrap:wrap}.tm-dt .field{width:auto}
+.np-note.invite{border-color:var(--b1)}.np-act{display:flex;gap:.4rem;margin-top:.5rem}
+@media(max-width:640px){.tm-slot{flex-direction:column;align-items:flex-start}.tm-p{flex-wrap:wrap}.tm-side{margin-left:3.1rem}}
+
+/* ---------- buttons on small screens ----------
+   Every label that is too long for a phone carries two spans:
+   .bl is the full text, .bs is the short version. Icon-only buttons (.ic) keep just the icon.
+   Anything without a short version may wrap instead of being cut off. */
+.btn .bs,.btn .bi{display:none}
+.btn .bn{font-weight:500;opacity:.8}
+@media(max-width:640px){
+  .btn{white-space:normal;text-align:center;max-width:100%;min-height:2.5rem;padding:.6rem .95rem;line-height:1.15}
+  .btn.sm{min-height:2.25rem;padding:.45rem .7rem;white-space:nowrap;flex-shrink:0}
+  .btn .bl:has(+ .bs){display:none}.btn .bs{display:inline}
+  .btn.ic{padding:0;width:2.5rem;height:2.5rem;min-height:0;flex:none;border-radius:50%}
+  .btn.ic.sm{width:2.25rem;height:2.25rem}
+  .btn.ic .bl{display:none}
+  .btn.ic .bi{display:inline-block}
+  .btn.ic svg:not(.bi){display:inline-block}
+  .lp-cta-row .btn,.dx-act .btn{flex:1 1 auto}
+  .tm-form .btn{justify-self:stretch}
+}

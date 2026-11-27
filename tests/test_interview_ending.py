@@ -12,7 +12,7 @@ def test_a_weak_answer_or_a_model_mistake_never_ends_the_interview(env, monkeypa
 
 def test_candidate_who_says_they_are_done_ends_it_with_a_closing_that_asks_nothing(env, monkeypatch):
     w, s, panel = env
-    start(s, panel, monkeypatch, [reply(panel, end_reason="finished", text="Thank you for your time today. We will be in touch about next steps. Any last questions?")]); answer(s, "I think I am done, can we stop here please.")
+    start(s, panel, monkeypatch, [reply(panel, end_reason="finished", text="Thank you for your time today. We will be in touch about next steps. Any last questions?")]); answer(s, "Okay, I am done now.")
     t, end, _ = agents.next_turn(s, 200)
     assert end is True and t.end_reason == "finished" and "?" not in t.text
 
@@ -36,3 +36,8 @@ def test_severe_conduct_ends_it_at_once(env, monkeypatch):
 def test_unprofessional_ending_is_known_to_the_evaluator(env):
     w, s, panel = env; s.assessment = {"ended_by": "unprofessional"}
     assert "ENDED THE INTERVIEW EARLY" in agents.ended_note(s) and agents.ended_note(type("S", (), {"assessment": {}})()) == ""
+
+def test_only_a_clear_short_request_counts_as_wanting_to_stop():
+    for t in ("I'm done.", "Okay, I am done now", "Can we stop here?", "let's end the interview", "Please end this interview", "I would like to stop"): assert agents.asks_to_end(t), t
+    for t in ("I finished the migration in two weeks and then handed it over to the data team.", "I need to go through the logs first", "We are done with the first phase and moved on to testing",
+              "I want to stop the process when the queue is full", "", "I'm finished with university and now I work in payments"): assert not agents.asks_to_end(t), t

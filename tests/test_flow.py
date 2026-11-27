@@ -326,7 +326,7 @@ def test_every_type_has_its_own_questions_research_and_animation():
     for k in kinds.ORDER:
         pf = kinds.profile(k); keys = [f["key"] for f in pf["fields"]]
         assert len(keys) == len(set(keys)) and any(f["key"] == "worry" for f in pf["fields"]) and pf["sections"][-1]["key"] == "fit"
-        assert [x["title"] for x in kinds.form_sections(k)][0] == "The opportunity" and len(kinds.research_steps(k)) == 8
+        assert [x["title"] for x in kinds.form_sections(k)][0] == "The opportunity" and len(kinds.research_steps(k)) == len(pf["plan"]) + 5   # the angles, forums, videos, social media, then writing and choosing the panel
 
 def test_new_interview_wizard_config_has_every_type_one_question_at_a_time(client_in):
     r = client_in.get("/w/new/"); html = r.content.decode(); cfg = r.context["cfg"]
@@ -381,7 +381,7 @@ def test_research_runs_one_search_per_angle_and_keeps_type_specific_sections(cli
     from core.services import kinds
     c = client_in; logic.ensure_seed(); c.post("/w/new/", {"kind": "pitch", "pitch__company": "Omega", "pitch__position": "Seed round", "pitch__market": "Used phone buyers"})
     ws = Workspace.objects.get(); assert c.post(f"/w/{ws.pk}/research/").json()["ok"]; ws.refresh_from_db()
-    assert len(SEARCHED) == 6 and any("Used phone buyers" in q and "Your market, with numbers" in q for q in SEARCHED)  # four angles + forums + videos; the market step sees what the founder told us
+    assert len(SEARCHED) == len(kinds.profile("pitch")["plan"]) + 3 and any("Used phone buyers" in q and "Your market, with numbers" in q for q in SEARCHED)  # one search per angle + forums + videos + social media; the market step sees what the founder told us
     keys = [x["key"] for x in ws.research["sections"]]; assert keys == [x["key"] for x in kinds.profile("pitch")["sections"]]  # exactly the pitch sections, unknown ones dropped
     assert ws.research["topics"][0]["importance"] == 8 and ws.research["likely_questions"][0]["q"] == "Why us?"
     assert ws.sources[0]["angle"] == "The investor or programme"
@@ -534,3 +534,49 @@ def test_repeated_questions_are_detected():
     from core.services import agents
     assert agents.too_similar("Could you break down the cost structure behind the $20,000 price point per unit?", ["Could you break down the $20,000 price per unit into its major cost components?"])
     assert not agents.too_similar("How would you handle a supplier delaying your first production run?", ["Could you break down the $20,000 price per unit into its major cost components?"])
+
+
+def test_research_reads_social_posts_and_never_treats_them_as_confirmed(client_in, monkeypatch):
+    from core.services import evidence
+    c = client_in; logic.ensure_seed(); c.post("/w/new/", {"kind": "startup", "startup__company": "Acme", "startup__position": "Engineer"}); ws = Workspace.objects.get()
+    asked = []
+    def search(prompt, system=None, temperature=0.3, purpose="research"):
+        asked.append(prompt)
+        if "TikTok, Instagram (Reels and posts)" in prompt:
+            return "- two rounds, then a case [source: tiktok]", [
+                {"url": "https://www.tiktok.com/@someone/video/123", "title": "My Acme interview"},
+                {"url": "https://www.instagram.com/reel/abc/", "title": "Acme tips", "snippet": "r" * 100},
+                {"url": "https://www.linkedin.com/posts/z", "title": "Hiring at Acme"},
+                {"url": "https://careers.acme.com/stages", "title": "Careers"}]
+        return "- fact", [{"url": "https://careers.acme.com/stages", "title": "Careers"}]
+    monkeypatch.setattr(ai, "search", search)
+    monkeypatch.setattr(evidence, "social_caption", lambda url, limit=500: "They asked about unit economics in round two" if "tiktok.com" in url else "")
+    fetched = []; monkeypatch.setattr(evidence, "fetch_text", lambda url, limit=6000: (fetched.append(url), "")[1])
+    inner = ai.call
+    def call(prompt, **kw):
+        if "public captions of" in prompt: assert "tiktok.com" in prompt and "instagram.com" in prompt; return "- unit economics came up in round two [source: tiktok]", []
+        if kw.get("json_mode") and "research briefing" in prompt: assert "WHAT THE POSTS THEMSELVES SAY" in prompt
+        return inner(prompt, **kw)
+    monkeypatch.setattr(ai, "call", call)
+    assert c.post(f"/w/{ws.pk}/research/").json()["ok"]; ws.refresh_from_db()
+    assert sum("TikTok, Instagram (Reels and posts)" in q for q in asked) == 1
+    cov = ws.research["coverage"]; assert cov["social"] == 3 and cov["official"] == 1 and cov["community"] == 0   # social posts are counted on their own, not as forum pages
+    plat = {s["platform"]: s for s in ws.sources if s.get("social")}; assert set(plat) == {"TikTok", "Instagram", "LinkedIn"} and plat["TikTok"]["read"] and all(s["tier"] == "community" for s in plat.values())
+    assert not any(evidence.is_social(u) for u in fetched)   # pages on login-wall sites are never fetched
+    page = c.get(f"/w/{ws.pk}/").content.decode(); assert "3 social media posts" in page and "TikTok post, caption read" in page
+    from core.services import research as R
+    assert R._status("confirmed", "tiktok.com") == "candidate_reported" and R._status("confirmed", "instagram.com/reel/abc") == "candidate_reported"
+
+
+def test_social_helpers_recognise_platforms_and_read_only_public_captions(monkeypatch):
+    from core.services import evidence
+    assert evidence.is_social("https://www.tiktok.com/@a/video/1") and evidence.is_social("https://x.com/a/status/1") and evidence.is_social("https://www.instagram.com/p/x/")
+    assert not evidence.is_social("https://netflix.com/title") and not evidence.is_social("https://reddit.com/r/x")   # netflix.com is not x.com
+    assert evidence.platform("https://twitter.com/a/status/1") == "X" and evidence.platform("https://www.threads.net/@a/post/1") == "Threads" and evidence.platform("https://example.com") == ""
+    assert evidence.tier("https://www.instagram.com/reel/abc/") == "community" and evidence.is_community_hint("an Instagram reel")
+    seen = []
+    def get(url, accept="", max_bytes=0, timeout=0): seen.append(url); return json.dumps({"title": "How I passed the Acme final round https://t.co/x", "author_name": "private person"})
+    monkeypatch.setattr(evidence, "_get", get)
+    cap = evidence.social_caption("https://www.tiktok.com/@a/video/123")
+    assert cap == "How I passed the Acme final round" and "private person" not in cap and seen[0].startswith("https://www.tiktok.com/oembed?url=")
+    assert evidence.social_caption("https://www.instagram.com/p/x/") == "" and evidence.social_caption("https://www.tiktok.com/@a") == "" and len(seen) == 1   # no request for platforms that need a login

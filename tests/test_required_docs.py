@@ -11,7 +11,7 @@ CV = "Ada Obi. Backend engineer, 3 years at Paystack building payment APIs in Py
 def test_every_interview_type_asks_in_three_parts_and_documents_come_last_after_a_document_check(client_in):
     cfg = client_in.get("/w/new/").context["cfg"]
     for k, kc in cfg["kinds"].items():
-        d = kinds.doc(k); ids = [x["id"] for x in kc["steps"]]; ds = kc["docSteps"]; st = ds[1]
+        d = kinds.doc(k); ids = [x["id"] for x in kc["steps"]]; ds = [x for x in kc["docSteps"] if x["id"] != "teammates"]; st = ds[1]   # the optional teammates question for team types comes after the documents
         assert [x["id"] for x in ds] == ["docscan", d["key"]] and ds[0]["type"] == "research" and ds[0]["noSkip"] and kc["docKey"] == d["key"], k
         assert st["type"] == "doc" and st["req"] and st["name"] == f"{k}__{d['key']}" and st["file"] == "doc_" + d["key"] and st["reqMsg"] and not st.get("adapt"), k
         assert d["key"] not in ids and "jd" in ids                                                           # the main document is no longer among the personal questions

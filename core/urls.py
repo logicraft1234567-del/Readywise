@@ -3,7 +3,10 @@ from . import views as v
 urlpatterns = [
  path("", v.landing, name="landing"), path("guide/", v.guide, name="guide"), path("contact/", v.contact, name="contact"),
  path("register/", v.register, name="register"), path("login/", v.login_view, name="login"), path("logout/", v.logout_view, name="logout"),
- path("dashboard/", v.dashboard, name="dashboard"), path("analytics/", v.analytics, name="analytics"), path("search/", v.search, name="search"), path("tasks/", v.tasks_page, name="tasks"), path("profile/", v.profile, name="profile"), path("welcome/", v.welcome, name="welcome"),
+ path("dashboard/", v.dashboard, name="dashboard"), path("analytics/", v.analytics, name="analytics"), path("search/", v.search, name="search"), path("tasks/", v.tasks_page, name="tasks"),
+    path("w/<int:pk>/team/", v.team_page, name="team"), path("w/<int:pk>/team/invite/", v.team_invite, name="team_invite"), path("w/<int:pk>/team/remove/<int:mid>/", v.team_remove, name="team_remove"),
+    path("w/<int:pk>/team/part/", v.team_part, name="team_part"), path("w/<int:pk>/team/split/", v.team_split, name="team_split"), path("w/<int:pk>/team/slot/", v.team_slot, name="team_slot"),
+    path("w/<int:pk>/team/vote/<int:sid>/", v.team_vote, name="team_vote"), path("team/invite/<int:mid>/<str:action>/", v.invite_respond, name="invite_respond"), path("profile/", v.profile, name="profile"), path("welcome/", v.welcome, name="welcome"),
  path("w/new/", v.workspace_new, name="ws_new"), path("w/<int:pk>/", v.workspace, name="ws"),
  path("w/<int:pk>/research/", v.do_research, name="ws_research"), path("w/<int:pk>/allocate/", v.do_allocate, name="ws_allocate"),
  path("w/<int:pk>/plan/", v.do_plan, name="ws_plan"), path("w/<int:pk>/adjust/", v.do_adjust, name="ws_adjust"),

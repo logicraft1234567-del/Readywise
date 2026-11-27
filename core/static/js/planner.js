@@ -26,13 +26,14 @@
   function linksHTML(t) {
     const L = t.links || {}, a = (x, ic, word) => x ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${ic}<span class="l">${x.found ? `<small>${word}</small> ` : ""}${esc(x.label)}</span></a>` : "";
     let iv = "";
-    if (L.interview) iv = t.can && !t.done ? `<button type="button" class="btn sm solid" data-start="${L.interview.workspace}">${I.flag}${esc(L.interview.label)}</button>` : t.done ? "" : `<span class="tk-lock">${I.lock}Interview opens ${esc(t.when)}</span>`;
+    if (L.interview) iv = t.can && !t.done ? `<button type="button" class="btn sm solid" data-start="${L.interview.workspace}">${I.flag}<span class="bl">${esc(L.interview.label)}</span><span class="bs">Start</span></button>` : t.done ? "" : `<span class="tk-lock">${I.lock}Interview opens ${esc(t.when)}</span>`;
     return `<div class="tk-links">${a(L.read, I.book, "Read")}${a(L.watch, I.play, "Watch")}${iv}</div>`;
   }
   function taskHTML(t, o = {}) {
     store_(t);
     const chips = [`<span class="chip">${esc(KIND[t.kind] || t.kind)}</span>`];
     if (o.showWs) chips.push(`<span class="chip">${esc(t.workspace)}</span>`);
+    if (t.who) chips.push(`<span class="chip who"><i data-lucide="user-round" width="11"></i>${esc(t.who)}</span>`);
     if (t.moved) chips.push(`<span class="chip warn">Moved from ${esc(t.moved.label)}</span>`);
     if (t.auto) chips.push(`<span class="chip soft">Added from your results</span>`);
     if (t.state === "later") chips.push(`<span class="chip">Opens ${esc(t.when)}</span>`);
@@ -97,14 +98,22 @@
   function openPanel() { const p = panel(); p.hidden = false; bell().setAttribute("aria-expanded", "true"); const pop = $("#rw-pop"); if (pop) pop.hidden = true; }
   function noteHTML(it) {
     if (it.task) return taskHTML(it.task, { compact: true, showWs: true, msg: it.message });
-    const a = it.type === "interview" ? `<a href="/w/${it.workspace_id}/#interview">Open the practice room</a>` : "";
+    if (it.type === "invite") return `<article class="np-note invite" data-invite="${it.invite}"><b>${esc(it.title)}</b><p>${esc(it.message)}</p><div class="np-act"><button type="button" class="btn sm solid" data-ans="accept">Accept</button><button type="button" class="btn sm" data-ans="decline">Decline</button></div></article>`;
+    const a = it.type === "interview" ? `<a href="/w/${it.workspace_id}/#interview">Open the practice room</a>` : it.link ? `<a href="${esc(it.link)}">Open the team page</a>` : "";
     return `<article class="np-note ${esc(it.type)}"><b>${esc(it.title)}</b><p>${esc(it.message)}</p>${a}</article>`;
   }
+  document.addEventListener("click", async e => {   // accept or decline an invitation straight from the bell
+    const b = e.target.closest("[data-ans]"), card = b && b.closest("[data-invite]"); if (!card) return; b.disabled = true;
+    try {
+      const r = await fetch(`/team/invite/${card.dataset.invite}/${b.dataset.ans}/`, { method: "POST", headers: { "X-CSRFToken": (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || "" }, credentials: "same-origin" }); const d = await r.json(); if (!r.ok) throw new Error(d.error || "Could not answer the invitation.");
+      card.innerHTML = `<b>${b.dataset.ans === "accept" ? "You joined the team" : "Invitation declined"}</b>${d.url && b.dataset.ans === "accept" ? `<p><a href="${d.url}">Open the team page and fill in your part</a></p>` : ""}`; refresh();
+    } catch (err) { b.disabled = false; alert(err.message); }
+  });
   function render(d) {
     last = d;
     const bd = $("#bell-badge"); if (bd) { bd.textContent = d.count; bd.hidden = !d.count; }
-    const side = $("#side-n"); if (side) { side.textContent = d.count; side.hidden = !d.count; }
-    const tab = $("#tab-n"); if (tab) { tab.textContent = d.count; tab.hidden = !d.count; }
+    const nt = d.tasks == null ? d.count : d.tasks; const side = $("#side-n"); if (side) { side.textContent = nt; side.hidden = !nt; }
+    const tab = $("#tab-n"); if (tab) { tab.textContent = nt; tab.hidden = !nt; }
     const list = $("#np-list"); if (list) list.innerHTML = d.items.length ? d.items.map(noteHTML).join("") : `<div class="np-empty">Nothing to do right now. Your plan is clear.</div>`;
     const f = $("#focus-list");
     if (f) { const t = d.items.filter(i => i.task); f.innerHTML = t.length ? t.slice(0, 6).map(i => taskHTML(i.task, { compact: true, showWs: true, msg: i.message })).join("") : `<p class="text-sm" style="color:var(--mut)">All clear. Start a practice interview to keep your skills sharp.</p>`; }

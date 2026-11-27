@@ -325,7 +325,46 @@ PROFILES = {
    eval="technical accuracy, justification of decisions, standards knowledge, troubleshooting method",
    weights=dict(technical=10, system_design=6, communication=5, behavioural=2, strategic=3, company=2)),
 }
-ORDER = ["startup", "employment", "internship", "graduate", "admission", "scholarship", "visa", "fellowship", "pitch", "certification"]
+import copy as _copy
+
+def _hackathon():
+    """Hackathon presentation: a team demos what it built and judges question it. Built from the investor-pitch profile, with its own fields, research angles and scoring."""
+    p = _copy.deepcopy(PROFILES["pitch"])
+    p.update(label="Hackathon presentation", icon="trophy", blurb="Demo day and judges' Q&A", company_label="Your project name", position_label="Hackathon or event, for example ETHGlobal, a university hackathon or a company challenge",
+             doc_label="Slides, README or project write-up", duration=15, format="Demo + judges' Q&A", base="standard", panel=["Peter", "Victoria", "Alex"])
+    p["fields"] = [F("problem", "Problem", "The problem and who has it, in one sentence", "text", "e.g. Students cannot find safe, cheap shared rides back to campus at night", sec=OPP, req=True),
+                   F("solution", "What you built", "What you built, in one sentence", "text", sec=OPP, req=True),
+                   F("theme", "Track or theme", "The hackathon track, theme or challenge you are answering", "text", "e.g. Fintech for Africa, or Best use of AI", sec=OPP),
+                   F("works", "What works today", "What really works today, and what is mocked, hard-coded or still an idea", "textarea", "Be honest: judges test this in the demo", sec=OPP),
+                   F("stack", "Tech and APIs", "Tech stack, APIs and tools you used", "text", "e.g. React, FastAPI, Postgres, Twilio, an LLM API", sec=OPP),
+                   F("users", "Users and validation", "Who it is for, and anything that shows they want it (interviews, signups, a pilot). Write 'none' if none.", "textarea", sec=YOU),
+                   F("rivals", "Alternatives", "What people use today instead, and who else is solving this?", "textarea", "Name real products, even big ones", sec=YOU),
+                   F("team", "Team", "Who is on the team and who built what?", "textarea", sec=YOU),
+                   F("next", "After the hackathon", "What happens next: will you keep building it, and how would it make money or reach users?", "textarea", sec=INT, req=True),
+                   F("risk", "Biggest weakness", "The biggest weakness or risk of the project", "text", sec=INT), WORRY]
+    p["guide"] = "Hackathon judging panel. Judges watch a short demo and then ask about the problem, who needs it, what really works versus what is mocked, technical depth and choices, why this team, what makes it different from existing products, and what happens after the event. Time is short, so questions are direct. Fair, curious and quick to spot an overclaim."
+    p["research"] = "the hackathon or event, its track and judging criteria, the product's space, the real products that compete with it, and the questions judges ask teams"
+    p["plan"] = [P("The hackathon and its judges", "The event, its track or theme, sponsors, judging criteria, past winners and what judges say they reward, with the year and source."),
+                 P("The problem space", "Who has this problem, how big it is, and the best available figures with year and source. Say when a figure is old or disputed."),
+                 P("Competitors and alternatives", "Real products and past hackathon projects that solve the same problem for the same users, how they differ and what they lack."),
+                 P("Technical choices and feasibility", "Whether the approach and the tools named are sound, common pitfalls for this kind of build, and what judges commonly test in a live demo."),
+                 P("Judges' questions and objections", "Questions and objections judges raise with teams at events like this, and what a convincing reply contains.")]
+    p["sections"] = [S("investor", "Event and judges", "landmark", "The event, track, judging criteria and what past winners did"),
+                     S("market", "The problem space in numbers", "bar-chart-3", "Sized with source and year; flag old or disputed figures"),
+                     S("competition", "Competitors and your edge", "swords", "Who you will be compared to and where you win or lose"),
+                     S("objections", "Likely judge questions and strong answers", "shield-alert", "What judges will push on and what a convincing reply contains"),
+                     S("reports", "What people who did this say", "messages-square", "Experiences, real questions and tips from forums, reviews and videos. Name the source and how many separate accounts agree; label as candidate-reported"),
+                     S("fit", "Gaps in your presentation right now", "target", "Vague claims, a demo that could fail and unanswered questions in what the team wrote")]
+    p["evidence"] = dict(where="Devpost, Reddit (r/hackathon), organisers' blogs, winners' write-ups and judges' posts", video="hackathon demo day judges questions; winning hackathon pitch; what judges ask at {position}")
+    p["anim"] = dict(sig="bars", c=["#f59e0b", "#ef4444", "#8b5cf6"], title="Studying your event and rivals", speed=1.0)
+    p["eval"] = "clarity of the problem, what truly works in the demo, technical depth, awareness of real competitors, team story, handling hard questions without overclaiming"
+    p["weights"] = dict(technical=8, system_design=5, communication=8, behavioural=3, strategic=7, company=5)
+    return p
+
+PROFILES["hackathon"] = _hackathon()
+TEAM_KINDS = ("pitch", "hackathon")   # the interview types presented by a team: the new-interview flow asks about teammates for these (a team can be added to any type from the workspace)
+COMPETITOR_KINDS = ("pitch", "hackathon")   # the research understands the product and verifies real competitors for these
+ORDER = ["startup", "employment", "internship", "graduate", "admission", "scholarship", "visa", "fellowship", "pitch", "hackathon", "certification"]
 
 
 # ---------- required documents ----------
@@ -341,6 +380,7 @@ DOCS = {
     "scholarship": D("cv", "Your CV", "Can I see your CV?", "Scholarship panels test your achievements, leadership and impact, so I need to know what you have actually done. Upload it or paste the text.", "Paste your CV here, or upload it below.", "Drop your CV here, or click to choose", True),
     "fellowship": D("cv", "CV or research summary", "Can I see your CV or a summary of your research?", "Your research, publications and experience decide which questions a fellowship panel asks. Upload it or paste the text.", "Paste your CV or research summary here.", "Drop your CV here, or click to choose", True),
     "visa": D("application", "Supporting documents", "What documents will you show the officer?", "List or paste what you will bring: offer or invitation letter, who pays and the proof, your plans back home, your travel history. Please leave out passport and bank account numbers.", "e.g. Offer letter from the University of Leeds, tuition paid, sponsor is my father (bank statement), I return to my family business in Lagos.", "Drop your documents summary here"),
+    "hackathon": D("deck", "Slides or project write-up", "Can I see your slides or project write-up?", "Judges ask about what is on your slides and in your README, so this is how I make the questions realistic. Upload it or paste the text.", "Paste the text of your slides, README or project description here.", "Drop your slides or write-up here, or click to choose"),
     "pitch": D("deck", "Pitch deck", "Can I see your pitch deck?", "Investors' questions come from what is on your slides, so this is how I make them realistic. Upload it or paste the text from the slides.", "Paste the text of your deck or one-pager here.", "Drop your pitch deck here, or click to choose"),
     "certification": D("cv", "Your background", "Can I see your CV, or a summary of your related experience?", "What you already know decides which exam topics to press you on. Upload your CV or paste a few lines about your experience and study so far.", "Paste your CV or a short summary of your experience here.", "Drop your CV here, or click to choose", True),
 }
@@ -357,17 +397,17 @@ def form_sections(kind):
         if fs: out.append({"title": title, "fields": fs})
     return out
 
-EVIDENCE_STEPS = ["Experiences and reviews from people who did this", "Interview videos and transcripts"]
+EVIDENCE_STEPS = ["Experiences and reviews from people who did this", "Interview videos and transcripts", "TikTok, Instagram, X and other social posts"]
 
 def research_steps(kind):
-    """Labels shown while researching: the type's own angles, then forums and videos, then the two closing steps every type has."""
+    """Labels shown while researching: the type's own angles, then forums, videos and social media, then the two closing steps every type has."""
     return [p["label"] for p in profile(kind)["plan"]] + EVIDENCE_STEPS + ["Writing your briefing", "Choosing your interviewers"]
 
 
 # The new-interview flow asks in three parts: your application, why you chose it, then your documents.
 # These are the questions that belong to the second part (the reasons), in the order they are asked.
 WHY_KEYS = {"startup": ["why"], "employment": ["why"], "internship": ["why"], "graduate": ["sector"], "admission": ["statement", "whyuni"],
-            "scholarship": ["goal", "why"], "visa": ["purpose", "ties"], "fellowship": ["fit"], "pitch": ["team"], "certification": ["motive"]}
+            "scholarship": ["goal", "why"], "visa": ["purpose", "ties"], "fellowship": ["fit"], "pitch": ["team"], "hackathon": ["team"], "certification": ["motive"]}
 
 # If the quick document check cannot reach the web or the AI, these are asked instead (the main document, such as the CV, is asked separately).
 DEFAULT_DOCS = {
@@ -380,5 +420,6 @@ DEFAULT_DOCS = {
     "visa": [("admission_letter", "Admission or invitation letter", "The officer checks why you are travelling.", True), ("funds", "Proof of funds or sponsor letter", "Funding is checked closely.", True), ("ties", "Proof of ties to your home country", "Job letter, property or family ties.", True)],
     "fellowship": [("proposal", "Research proposal", "The panel questions your project.", True), ("references", "Reference letters", "Referees are often named.", False)],
     "pitch": [("financials", "Financial model or key numbers", "Investors test your numbers.", True), ("traction", "Traction evidence (metrics, pilots, letters of intent)", "Proof beats claims.", False)],
+    "hackathon": [("demo", "Demo script or screenshots", "Judges test what the demo really does.", True), ("rules", "Event rules and judging criteria", "Questions follow the criteria.", False)],
     "certification": [("exam_guide", "Official exam guide or syllabus", "Shows the domains that are tested.", True)],
 }

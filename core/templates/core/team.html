@@ -1,0 +1,29 @@
+{% extends 'core/app_base.html' %}{% block title %}Team: {{ ws.title }}{% endblock %}
+{% block content %}
+<div class="pg-head"><div><a class="text-sm" href="{% url 'ws' ws.pk %}" style="color:var(--mut)">&larr; {{ ws.title }}</a><h1>Team</h1><p>{{ kind }}. {% if coord %}You are the coordinator: you invite people, run the plan and the tasks are shared out between everyone.{% else %}You share this workspace with the team. Fill in your part and pick a time with everyone.{% endif %}</p></div></div>
+{% if messages %}<div class="tm-msgs" role="status">{% for m in messages %}<div class="tm-msg {{ m.tags }}">{{ m }}</div>{% endfor %}</div>{% endif %}
+
+<section class="tm-sec"><div class="sec-title"><h2>People</h2><span>{{ people|length }} of {{ max }}</span></div>
+<div class="tm-people">{% for p in people %}<article class="glass tm-p"><div class="tm-av" aria-hidden="true">{{ p.name|first|upper }}</div><div class="min-w-0"><b class="truncate d-block">{{ p.name }}{% if p.me %} <small>(you)</small>{% endif %}</b>
+<small>{{ p.role }}{% if p.status == 'invited' %} &middot; waiting for them to accept{% endif %}{% if p.email and p.status == 'invited' %} &middot; {{ p.email }}{% endif %}</small>
+<p>{% if p.part %}{{ p.part }}{% elif p.status == 'invited' %}Has not joined yet.{% else %}No part written yet.{% endif %}</p></div>
+<div class="tm-side">{% if p.status == 'accepted' %}<span class="chip">{{ p.tasks }} task{{ p.tasks|pluralize }}</span>{% endif %}{% if coord and p.id %}<form method="post" action="{% url 'team_remove' ws.pk p.id %}" onsubmit="return confirm('Remove this person from the team?')">{% csrf_token %}<button class="btn sm danger">Remove</button></form>{% endif %}</div></article>{% endfor %}</div>
+{% if coord %}{% if room > 0 %}<form method="post" action="{% url 'team_invite' ws.pk %}" class="glass tm-form"><label for="emails"><b>Invite teammates</b><small>One email per line. You can add {{ room }} more. They see the invitation in their ReadyWise notifications when they sign in with that email.</small></label>
+<textarea class="field" id="emails" name="emails" rows="2" placeholder="ada@gmail.com&#10;kola@gmail.com" required></textarea>{% csrf_token %}<button class="btn solid"><span class="bl">Send invitations</span><span class="bs">Invite</span></button></form>{% else %}<p class="text-sm" style="color:var(--mut)">The team is full ({{ max }} people).</p>{% endif %}{% endif %}</section>
+
+<section class="tm-sec"><div class="sec-title"><h2>Your part</h2></div>
+<form method="post" action="{% url 'team_part' ws.pk %}" class="glass tm-form"><label for="part"><b>What will you present or cover?</b><small>For example: the market and the numbers, the product demo, the technical choices. Your tasks and the questions you get follow this.</small></label>
+<textarea class="field" id="part" name="part" rows="3" maxlength="900" placeholder="e.g. I cover the market size, pricing and go-to-market.">{{ my_part }}</textarea>{% csrf_token %}<button class="btn solid"><span class="bl">Save my part</span><span class="bs">Save</span></button></form></section>
+
+<section class="tm-sec"><div class="sec-title"><h2>Prep tasks</h2></div>
+<div class="glass tm-form"><p class="text-sm">{% if has_plan %}Open tasks are shared out by what each person presents. {{ shared }} shared task{{ shared|pluralize }} (such as practice interviews) belong to the whole team. Everyone sees their own on the <a href="{% url 'tasks' %}">Tasks page</a>.{% else %}Once the coordinator generates the plan, the tasks are split between everyone automatically.{% endif %}</p>
+{% if coord and has_plan %}<form method="post" action="{% url 'team_split' ws.pk %}">{% csrf_token %}<button class="btn"><span class="bl">Share the tasks out again</span><span class="bs">Re-share</span></button></form>{% endif %}</div></section>
+
+<section class="tm-sec"><div class="sec-title"><h2>Practice interview time</h2>{% if scheduled %}<span>Confirmed</span>{% endif %}</div>
+{% if scheduled %}<div class="glass tm-ok"><i data-lucide="calendar-check" width="18"></i><span><b>{{ scheduled|date:"l j F, H:i" }}</b> is confirmed. Everyone is free, and the date is on your calendar.</span></div>{% endif %}
+<div class="tm-slots">{% for s in slots %}<article class="glass tm-slot{% if s.chosen %} on{% endif %}"><div><b>{{ s.starts }}</b><small>{{ s.yes }} of {{ s.total }} said yes{% if s.chosen %} &middot; confirmed{% endif %}</small>
+<div class="tm-who">{% for w in s.who %}<span class="chip {% if w.vote == 'yes' %}ok{% endif %}">{{ w.name }}: {% if w.vote == 'yes' %}free{% elif w.vote == 'no' %}busy{% else %}no answer{% endif %}</span>{% endfor %}</div></div>
+{% if not s.chosen %}<form method="post" action="{% url 'team_vote' ws.pk s.id %}" class="tm-vote">{% csrf_token %}<button class="btn sm solid" name="vote" value="yes" {% if s.mine == 'yes' %}disabled{% endif %}><span class="bl">I am free</span><span class="bs">Free</span></button><button class="btn sm" name="vote" value="no" {% if s.mine == 'no' %}disabled{% endif %}><span class="bl">I am busy</span><span class="bs">Busy</span></button></form>{% endif %}</article>{% empty %}<p class="text-sm" style="color:var(--mut)">No time proposed yet.</p>{% endfor %}</div>
+<form method="post" action="{% url 'team_slot' ws.pk %}" class="glass tm-form tm-when"><label><b>Propose a time</b><small>Everyone on the team is asked to say if they are free. The first time everybody says yes is confirmed.</small></label>
+<div class="tm-dt"><input class="field" type="date" name="date" required aria-label="Date"><input class="field" type="time" name="time" required aria-label="Time">{% csrf_token %}<button class="btn solid">Propose</button></div></form></section>
+{% endblock %}

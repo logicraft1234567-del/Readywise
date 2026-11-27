@@ -1,6 +1,6 @@
 {% extends 'core/app_base.html' %}{% load static %}{% block title %}Interview room: ReadyWise{% endblock %}{% block shellcls %}focus{% endblock %}
 {% block head %}<link rel="stylesheet" href="{% static 'css/room.css' %}"><link rel="stylesheet" href="{% static 'css/room-glass.css' %}"><script src="{% static 'js/intro.js' %}"></script><script src="{% static 'js/voice.js' %}"></script><script src="{% static 'js/bench.js' %}"></script><script src="{% static 'vendor/faceapi/face-api.js' %}" defer></script>{% endblock %}
-{% block actions %}<a class="btn sm" href="{% url 'ws' ws.pk %}"><i data-lucide="log-out" width="14"></i>Leave room</a>{% endblock %}
+{% block actions %}<a class="btn sm ic" aria-label="Leave room" title="Leave room" href="{% url 'ws' ws.pk %}"><i data-lucide="log-out" width="14"></i><span class="bl">Leave room</span></a>{% endblock %}
 {% block content %}
 <div class="rm" id="rm">
 
@@ -24,7 +24,7 @@
       <label><input type="checkbox" id="vconsent"><span>Let ReadyWise analyse up to 5 camera snapshots for presentation feedback. They are sent to Groq and not stored.</span></label>
       <label><input type="checkbox" id="liveconsent"><span><b>Live voice interviewer (free, beta).</b> Your microphone audio and, while your camera is on, a camera picture about once a second are streamed to Google's Gemini service during the interview. On Google's free tier Google may use this data to improve its products. ReadyWise keeps only the written transcript (and a recording only if you ticked the recording option). Leave this unticked to use the standard interview.</span></label>
     </div>
-    <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.3rem"><button class="rm-btn" onclick="checkDevices()"><i data-lucide="mic" width="16"></i>Check camera and microphone</button><button class="rm-btn go" id="go" onclick="begin()"><i data-lucide="play" width="16"></i>Join interview</button></div>
+    <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.3rem"><button class="rm-btn" onclick="checkDevices()"><i data-lucide="mic" width="16"></i><span class="bl">Check camera and microphone</span><span class="bs">Check devices</span></button><button class="rm-btn go" id="go" onclick="begin()"><i data-lucide="play" width="16"></i><span class="bl">Join interview</span><span class="bs">Join</span></button></div>
   </div>
 </section>
 
@@ -40,7 +40,7 @@
       <div class="rm-me-pip" id="pip"><video id="me" autoplay muted playsinline></video><div class="rm-nocam"><i data-lucide="video-off" width="28"></i><span>Camera off</span></div><div class="chip" id="vchip">Camera off</div><div class="rm-plate"><div class="who"><b>You</b></div><span class="rm-state" id="mestate">Ready</span></div></div>
     </div>
     <div class="rm-bench" id="bench"><div class="rm-brief"><h3 id="b-title"></h3><div id="b-brief" class="b-brief"></div><div class="clock" id="b-clock"></div></div>
-      <div class="rm-work"><div class="rm-wbar"><select id="b-lang" aria-label="Language"><option value="javascript">JavaScript (checks run here)</option><option value="python">Python</option><option value="java">Java</option><option value="cpp">C++</option><option value="sql">SQL</option><option value="other">Other</option></select><span class="grow" id="b-note"></span><button class="rm-btn" id="b-run" onclick="runChecks()"><i data-lucide="play" width="14"></i>Run checks</button><button class="rm-btn go" onclick="submitBuild()"><i data-lucide="send" width="14"></i>Submit solution</button></div>
+      <div class="rm-work"><div class="rm-wbar"><select id="b-lang" aria-label="Language"><option value="javascript">JavaScript (checks run here)</option><option value="python">Python</option><option value="java">Java</option><option value="cpp">C++</option><option value="sql">SQL</option><option value="other">Other</option></select><span class="grow" id="b-note"></span><button class="rm-btn" id="b-run" onclick="runChecks()"><i data-lucide="play" width="14"></i><span class="bl">Run checks</span><span class="bs">Run</span></button><button class="rm-btn go" onclick="submitBuild()"><i data-lucide="send" width="14"></i><span class="bl">Submit solution</span><span class="bs">Submit</span></button></div>
       <textarea class="rm-code" id="b-code" spellcheck="false" autocapitalize="off" aria-label="Your solution"></textarea><div class="rm-res" id="b-res" aria-live="polite"></div></div></div>
     <div class="rm-cap" aria-live="polite"><p id="cap"></p></div>
     <div class="rm-type" id="typebox"><textarea id="typed" rows="2" placeholder="Type your answer" aria-label="Type your answer"></textarea><button class="rm-btn go" onclick="sendTyped()">Send</button></div>

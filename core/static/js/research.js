@@ -7,9 +7,9 @@
   const stage = $("rs-stage"), scenes = {}; stage.querySelectorAll(".sc").forEach(n => { scenes[[...n.classList].find(c => c.startsWith("sc-")).slice(3)] = n; });
   const seen = new Set(); let timer = null, startedAt = 0, noteTimer = null, cycle = null, typer = null;
   /* what each type reads on the web: shown in the browser scene */
-  const WEB = { startup: "company site, founders, funding news", employment: "company site, careers, role pages", internship: "programme page, eligibility, deadlines", graduate: "graduate scheme, assessment stages", admission: "admissions page, course requirements", scholarship: "scholarship page, selection criteria", visa: "official government guidance", fellowship: "fellowship page, selection process", pitch: "investor profile, portfolio, market data", certification: "exam syllabus, format, competencies" };
-  /* which scene a step belongs to: the last two steps are fixed, the two before them are forums and videos, everything else is the web */
-  function sceneFor(i) { const n = ui.steps.length; return i === n - 1 ? "panel" : i === n - 2 ? "write" : i === n - 3 ? "video" : i === n - 4 ? "voices" : "web"; }
+  const WEB = { hackathon: "event site, Devpost, past winners, judges", startup: "company site, founders, funding news", employment: "company site, careers, role pages", internship: "programme page, eligibility, deadlines", graduate: "graduate scheme, assessment stages", admission: "admissions page, course requirements", scholarship: "scholarship page, selection criteria", visa: "official government guidance", fellowship: "fellowship page, selection process", pitch: "investor profile, portfolio, market data", certification: "exam syllabus, format, competencies" };
+  /* which scene a step belongs to: the last two steps are fixed, the three before them are forums, videos and social media, everything else is the web */
+  function sceneFor(i) { const n = ui.steps.length; return i === n - 1 ? "panel" : i === n - 2 ? "write" : i === n - 3 ? "voices" : i === n - 4 ? "video" : i === n - 5 ? "voices" : "web"; }
   function typeUrl(text) { clearInterval(typer); const u = $("sc-url"); let n = 0; u.textContent = ""; typer = setInterval(() => { n += 1; u.textContent = text.slice(0, n); if (n >= text.length) clearInterval(typer); }, 28); }
   let current = "";
   function setScene(name, label) {

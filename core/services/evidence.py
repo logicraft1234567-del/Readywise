@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 UA = "Mozilla/5.0 (compatible; ReadyWiseBot/1.0; interview-preparation research)"
 OFFICIAL_SUFFIXES = (".gov", ".edu", ".ac.uk", ".gov.uk", ".gov.ng", ".gov.au", ".gc.ca", ".int", ".mil", ".europa.eu", ".edu.au", ".ac.za", ".gov.in", ".edu.ng")
 COMMUNITY = ("reddit.com", "glassdoor.", "teamblind.com", "indeed.com", "quora.com", "thestudentroom.co.uk", "linkedin.com", "medium.com", "dev.to", "news.ycombinator.com",
-             "levels.fyi", "leetcode.com", "collegeconfidential", "wallstreetoasis", "nairaland.com", "youtube.com", "youtu.be", "tiktok.com", "facebook.com", "x.com", "twitter.com",
+             "levels.fyi", "leetcode.com", "collegeconfidential", "wallstreetoasis", "nairaland.com", "youtube.com", "youtu.be", "tiktok.com", "instagram.com", "threads.net", "facebook.com", "x.com", "twitter.com",
              "substack.com", "forum", "discuss", "community", "visajourney.com", "trustpilot.com", "ambitionbox.com", "careerbliss.com", "prepinsta.com")
 NO_FETCH = ("linkedin.com", "facebook.com", "instagram.com", "x.com", "twitter.com", "tiktok.com", "youtube.com", "youtu.be", "glassdoor.", "indeed.com", "teamblind.com")  # login walls, or handled separately
 _robots = {}
@@ -33,7 +33,7 @@ def tier(url, company=""):
     return "web"
 
 _HINTS = ("reddit", "glassdoor", "teamblind", "blind.com", "quora", "studentroom", "linkedin", "youtube", "youtu.be", "forum", "anonymous", "candidate report", "candidate-reported",
-          "nairaland", "levels.fyi", "indeed.com", "medium.com", "tiktok", "twitter", "facebook", "trustpilot", "ambitionbox", "visajourney")
+          "nairaland", "levels.fyi", "indeed.com", "medium.com", "tiktok", "instagram", "threads.net", "twitter", "facebook", "trustpilot", "ambitionbox", "visajourney")
 
 def is_community_hint(text):
     """True if a source note mentions a forum, review site or video, so a finding based on it can never count as confirmed."""
@@ -98,6 +98,34 @@ def transcript_text(rows, limit=9000, window=40):
     full = "\n".join(lines)
     if len(full) <= limit: return full
     head = int(limit * 0.65); return full[:head] + "\n[...]\n" + full[-(limit - head):]
+
+# ---------- social media ----------
+SOCIAL_HOSTS = ("tiktok.com", "instagram.com", "x.com", "twitter.com", "linkedin.com", "facebook.com", "threads.net", "fb.watch")
+
+def is_social(url):
+    """True for a post on TikTok, Instagram, X, LinkedIn, Facebook or Threads."""
+    h = _host(url); return any(_match(h, n) for n in SOCIAL_HOSTS)
+
+def platform(url):
+    """Short platform name for a social URL, or '' when it is not one."""
+    h = _host(url)
+    for n, label in (("tiktok.com", "TikTok"), ("instagram.com", "Instagram"), ("x.com", "X"), ("twitter.com", "X"), ("linkedin.com", "LinkedIn"), ("facebook.com", "Facebook"), ("fb.watch", "Facebook"), ("threads.net", "Threads")):
+        if _match(h, n): return label
+    return ""
+
+def social_caption(url, limit=500):
+    """The public caption of one TikTok video or X post, read through the platform's own public oEmbed endpoint (no login, no scraping).
+    The author's name is never kept. Instagram, LinkedIn, Facebook and Threads only share captions with an app token, so they return '' and the search snippet is used instead."""
+    h, path = _host(url), urlparse(url).path
+    if _match(h, "tiktok.com") and "/video/" in path: ep = "https://www.tiktok.com/oembed?url=" + urllib.parse.quote(url, safe="")
+    elif (_match(h, "x.com") or _match(h, "twitter.com")) and "/status/" in path: ep = "https://publish.twitter.com/oembed?omit_script=1&url=" + urllib.parse.quote(url, safe="")
+    else: return ""
+    raw = _get(ep, "application/json", 60_000, 8)
+    try:
+        d = json.loads(raw); txt = d.get("title") or html_to_text(d.get("html", ""), limit) or ""
+        txt = re.sub(r"\s+", " ", re.sub(r"https?://\S+|pic\.twitter\.com/\S+", "", html.unescape(txt))).strip()
+        return txt[:limit] if len(txt) >= 20 else ""
+    except Exception: return ""
 
 # ---------- safe page fetching ----------
 def _public(host):

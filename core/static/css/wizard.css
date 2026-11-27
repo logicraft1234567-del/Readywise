@@ -151,3 +151,11 @@ textarea.wz-in{resize:none;min-height:7.4rem;line-height:1.5}
 .wz-doc b{font-weight:600;margin-right:.5rem}
 .wz-doc small{color:var(--mut);font-size:.84rem;line-height:1.45}
 @media(prefers-reduced-motion:reduce){.wz-scan-s.busy::before{animation:none}}
+
+/* wizard buttons: never clip a label on a phone, let it wrap and fill the row */
+@media (max-width:640px){
+  .wz-btn{white-space:normal;text-align:center;justify-content:center;max-width:100%;padding:.75rem 1.1rem}
+  .wz-btn.ghost{padding:.75rem .8rem}
+  .wz-btn.go{flex:1 1 9rem}
+  .wz-done .acts .wz-btn,.wz-intro .acts .wz-btn{flex:1 1 100%}
+}

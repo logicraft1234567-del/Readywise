@@ -5,7 +5,7 @@
 {% if not profile.cv_text %}<div class="nudge" style="cursor:default"><i data-lucide="file-up" width="18" style="color:var(--b1)"></i><span class="text-sm">Add your CV so interviewers can ask about your real experience.</span><a class="btn sm ml-auto" href="{% url 'profile' %}">Add CV</a></div>{% endif %}
 
 <div class="pg-head dx-head"><div><h1>{{ hello }}, {{ display_name }}.</h1><p>{% if stats.due %}You have <a href="{% url 'tasks' %}" style="color:var(--b1);font-weight:600">{{ stats.due }} task{{ stats.due|pluralize }}</a> to do today.{% else %}Nothing is overdue. Pick what to practise next.{% endif %}</p></div>
-<a class="btn solid" href="{% url 'ws_new' %}"><i data-lucide="plus" width="16"></i>New interview</a></div>
+<a class="btn solid" href="{% url 'ws_new' %}"><i data-lucide="plus" width="16"></i><span class="bl">New interview</span><span class="bs">New</span></a></div>
 
 {% if focus %}
 <section class="glass dx-next" aria-label="Your next interview">
@@ -24,7 +24,7 @@
     <a class="btn solid" href="{% url 'ws' focus.w.pk %}">Continue<i data-lucide="arrow-right" width="15"></i></a></div>
 </section>
 {% else %}
-<section class="glass dx-next dx-empty"><div><img src="{% static 'img/mark.svg' %}" width="32" alt=""><h2>Start your first interview</h2><p>Tell ReadyWise what you are preparing for. It builds your plan and picks the interviewers.</p><a class="btn solid" href="{% url 'ws_new' %}"><i data-lucide="plus" width="16"></i>New interview</a></div></section>
+<section class="glass dx-next dx-empty"><div><img src="{% static 'img/mark.svg' %}" width="32" alt=""><h2>Start your first interview</h2><p>Tell ReadyWise what you are preparing for. It builds your plan and picks the interviewers.</p><a class="btn solid" href="{% url 'ws_new' %}"><i data-lucide="plus" width="16"></i><span class="bl">New interview</span><span class="bs">New</span></a></div></section>
 {% endif %}
 
 <div class="strip dx-strip">
@@ -35,7 +35,7 @@
 </div>
 
 <div class="dx-bottom{% if not others %} solo{% endif %}">
-  <section class="glass pg-card"><header><div><h3>Interview score over time</h3><p>{{ progress.trend.text }}</p></div><a class="btn sm" href="{% url 'analytics' %}">Full analysis<i data-lucide="arrow-right" width="14"></i></a></header>
+  <section class="glass pg-card"><header><div><h3>Interview score over time</h3><p>{{ progress.trend.text }}</p></div><a class="btn sm" href="{% url 'analytics' %}"><span class="bl">Full analysis</span><span class="bs">Analysis</span><i data-lucide="arrow-right" width="14"></i></a></header>
     {% if progress.series %}<div class="chart-box"><canvas id="pg-score" role="img" aria-label="Interview score over time"></canvas></div>{% else %}<div class="pg-empty"><div><b>No scores yet</b>Finish a practice interview and your trend starts here.</div></div>{% endif %}</section>
   {% if others %}<section class="dx-list" aria-label="Other interviews"><div class="sec-title"><h2>Other interviews</h2><span>{{ others|length }}</span></div>
     {% for r in others|slice:":5" %}<a class="glass dx-row" href="{% url 'ws' r.w.pk %}"><div class="min-w-0"><b class="truncate d-block">{{ r.w.title }}</b><small>{% if r.left is not None %}{{ r.left }} day{{ r.left|pluralize }} left{% else %}{{ r.w.get_kind_display }}{% endif %}</small></div><div class="dx-mini"><span>{{ r.pct }}%</span><div class="bar"><i data-w="{{ r.pct }}"></i></div></div></a>{% endfor %}</section>{% endif %}

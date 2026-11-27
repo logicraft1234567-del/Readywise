@@ -63,3 +63,12 @@ body:has(#ws-foot) .pop{bottom:6.4rem}
 @media (max-width:760px){body:has(#ws-foot) .pop{bottom:10.5rem}}
 
 @media(max-width:1000px){.ws-foot{bottom:calc(var(--tab-h,64px) + env(safe-area-inset-bottom,0px))}}
+
+/* footer button: full label on desktop, short on phones */
+.jbtn .bs{display:none}
+@media (max-width:760px){
+  .jbtn{min-width:0;padding:.75rem 1rem}
+  .jbtn .bl{display:none}.jbtn .bs{display:inline}
+  .ft-back{padding:.6rem .7rem}
+}
+@media (max-width:380px){.ft-back{font-size:.85rem}.jbtn{gap:.4rem;padding:.7rem .8rem}}

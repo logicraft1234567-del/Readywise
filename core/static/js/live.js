@@ -121,6 +121,10 @@ const Live = (() => {
 
   /* ---------- messages from Gemini ---------- */
   let lastCand = "", endReason = "", endGuard = 0;
+  function asksToEnd(t) {   // only a clear request to stop, in a short sentence of their own; "I finished the migration" inside a real answer never counts
+    t = String(t || "").replace(/\s+/g, " ").trim(); if (!t || t.split(" ").length > 14) return false;
+    return /^\W*(ok(ay)?|alright|so|well|yes|yeah|please)?\W*(i'?m|i am|we'?re|we are)\s+(done|finished)(\s+now|\s+here|\s+for\s+today|\s+with\s+(this|the)\s+(interview|meeting|call))?\W*$/i.test(t) || /\b(end|stop|finish|wrap\s+up)\s+(the|this)\s+(interview|meeting|call|session)\b/i.test(t) || /^\W*(ok(ay)?|alright|so|well|please)?\W*(let'?s|can\s+we|could\s+we|may\s+we|i\s+want\s+to|i\s+would\s+like\s+to|i'?d\s+like\s+to|i\s+need\s+to)\s+(stop|end|finish|wrap\s+up)(\s+now|\s+here|\s+this|\s+for\s+today)?\W*$/i.test(t);
+  }
   function onTool(v, calls) {
     for (const fc of calls) {
       const reply = (result, note) => sendV(v, { toolResponse: { functionResponses: [{ id: fc.id, name: fc.name, response: note ? { result, note } : { result } }] } });
@@ -132,7 +136,7 @@ const Live = (() => {
         reply("ok"); pendingHand = to; clearTimeout(handGuard); handGuard = setTimeout(() => { if (pendingHand) doHandover(pendingHand); }, 9000); continue;   // normally the turn ends first; this covers a missing turnComplete
       }
       if (fc.name !== "end_interview") { reply("unknown tool"); continue; }
-      const el = (Date.now() - t0) / 1000, wants = /\b(i'?m|i am|we'?re|we are) (done|finished)|\b(let'?s|can we|could we) (stop|end|finish)|\bi (want|need|would like) to (stop|end|leave)|end (the|this) (interview|call|meeting)/i.test(lastCand);
+      const el = (Date.now() - t0) / 1000, wants = asksToEnd(lastCand);
       const ok = a.reason === "finished" ? (wants || el >= meta.limit_s * .8) : a.reason === "unprofessional" ? (a.severe === true || a.warned_before === true) : false;   // the same rules the standard interview uses
       if (!ok || v !== active) { reply("refused", a.reason === "unprofessional" ? "Give the candidate one calm professional warning first, then continue the interview." : "The interview is not finished. Continue with your next question."); continue; }
       reply("ok"); endReason = a.reason; closing = true; pendingHand = null; clearTimeout(endGuard); endGuard = setTimeout(() => finish(false, endReason), 15000);   // normally the end follows the spoken goodbye; this only covers a missing turnComplete

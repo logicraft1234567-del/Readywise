@@ -14,7 +14,7 @@ from ..models import Finding, Profile
 STATUS = ("confirmed", "candidate_reported", "inferred")
 BUDGET_ANGLE, BUDGET_EVIDENCE = 40, 60   # seconds a web angle / the forums and videos may take before the research moves on without it
 WORKERS = 5  # parallel searches; the research keys rotate underneath (kept low: Groq counts tokens per minute across all requests)
-SOCIAL = ("linkedin.com", "facebook.com", "x.com", "twitter.com", "tiktok.com", "instagram.com")  # pages we cannot read without logging in
+SOCIAL = ("linkedin.com", "facebook.com", "x.com", "twitter.com", "tiktok.com", "instagram.com", "threads.net")  # pages we cannot read without logging in
 
 def _status(v, hint=""):
     """confirmed / candidate_reported / inferred. Evidence rule enforced in code: a claim resting on a forum, review site or video is never confirmed."""
@@ -56,7 +56,7 @@ def _domain(url):
     try: return urlparse(url).netloc.replace("www.", "")[:40]
     except Exception: return ""
 
-RULES = ("Prefer official and current sources. After every fact put [source: site or URL, date if known] and tag it CONFIRMED (official source), REPORTED (forum, review site, video, anonymous or candidate report) or INFERRED. "
+RULES = ("Prefer official and current sources. After every fact put [source: site or URL, date if known] and tag it CONFIRMED (official source), REPORTED (forum, review site, video, social media post, anonymous or candidate report) or INFERRED. "
          "Include specific figures, names and dates where they exist. Never present anonymous or old reports as confirmed hiring policy. If you cannot find reliable information, say so plainly instead of guessing. "
          "Visa, admission and scholarship work is preparation practice only, never a prediction of an official decision.")
 
@@ -79,6 +79,25 @@ def _video_prompt(ws, ctx):
     return (f"Find YouTube videos by people who went through, or coach, this kind of interview. {ctx.splitlines()[0]}\nSearch for things like: {_fill(e['video'], ws)}.\n"
             "List the 5 best videos as bullets: full https://www.youtube.com/watch?v=... URL, title, channel, upload date, and one line on why it is relevant. Prefer videos from the last three years and with spoken explanations (not music or slideshows). "
             "Only list videos you actually found; never invent a URL.")
+
+def _social_prompt(ws, ctx, lang):
+    e = kinds.profile(ws.kind)["evidence"]
+    return (f"You are the research agent for a {kinds.profile(ws.kind)['label'].lower()} interview. Find public posts on TikTok, Instagram (Reels and posts), X (Twitter), LinkedIn, Facebook groups and Threads "
+            f"by PEOPLE WHO WENT THROUGH this process, or by recruiters, coaches and the organisation itself, about how it really works.\n{ctx}\n"
+            f"Search each platform separately, for example: {_fill(e['video'], ws)}, plus the organisation or programme name with words like interview, questions, experience, got the job, rejected, tips, hiring process.\n"
+            "Collect: the stages and format described, the actual questions asked, timing, what worked or went wrong, and anything the organisation itself announced. "
+            "For every post say the platform, whether it is first-hand ('I interviewed') or second-hand, its date, and whether the person is selling a course or coaching (treat that with extra doubt). "
+            "Social posts are the weakest evidence: they are anecdotes and the most dramatic ones spread furthest, so say how many independent posts agree and never present one viral story as the norm. "
+            "Describe creators by platform and type ('a TikTok creator', 'a LinkedIn post by a recruiter'); never include usernames, handles, faces or personal details of private individuals, and never name a private person. "
+            "Only list posts you actually found, with their full URL; never invent a URL. If you find nothing useful, say so plainly.\n"
+            f"Write 6 to 10 bullet notes, 350 words at most. {RULES}\nWrite in {lang}.")
+
+def _social_pages_prompt(ws, ctx, caps, lang):
+    body = "\n\n".join(f"--- {pf} post {u} ---\n{t}" for u, pf, t in caps)
+    return (f"Below are the public captions of {len(caps)} social media posts about: {ws.title}.\n{ctx.splitlines()[0]}\n"
+            "Extract only what helps a candidate prepare: stages, format, questions mentioned, what worked or went wrong, and when. Say first-hand or second-hand. "
+            "Paraphrase; never quote more than 12 words. Put [source: URL] after each point. Skip anything unrelated to this organisation, role or interview type, and skip posts that only sell a course. "
+            f"Do not repeat usernames or personal details. Mark everything REPORTED. 220 words at most. Write in {lang}.\n\n{body}")
 
 def _pages_prompt(ws, ctx, docs, lang):
     body = "\n\n".join(f"--- {u} ---\n{t}" for u, t in docs)
@@ -118,6 +137,25 @@ def _task_forums(ws, ctx, lang):
         try: extra = ai.call(_pages_prompt(ws, ctx, docs[:4], lang), temperature=0.2, purpose="research")[0]
         except ai.AIError: extra = ""
     return {"text": text + (f"\n\nWHAT THE PAGES THEMSELVES SAY:\n{extra}" if extra else ""), "sources": src}
+
+def _task_social(ws, ctx, lang):
+    """Public posts on TikTok, Instagram, X, LinkedIn, Facebook and Threads. These sites cannot be read without logging in, so this goes through web search,
+    adds the public caption of TikTok and X posts where the platform shares it, and always treats the result as reported by candidates, never confirmed."""
+    text, src = _search(_social_prompt(ws, ctx, lang))
+    posts = [s for s in src if s.get("url") and evidence.is_social(s["url"])]
+    for s in posts: s["social"] = True; s["platform"] = evidence.platform(s["url"])
+    caps = []
+    for s in posts[:6]:
+        c = evidence.social_caption(s["url"])
+        if c: caps.append((s["url"], s["platform"], c)); s["read"] = True
+        elif s.get("snippet") and len(s["snippet"]) > 60: caps.append((s["url"], s["platform"], s["snippet"][:500]))
+    extra = ""
+    if caps:
+        try: extra = ai.call(_social_pages_prompt(ws, ctx, caps[:5], lang), temperature=0.2, purpose="research")[0]
+        except ai.AIError: extra = ""
+    body = text + (f"\n\nWHAT THE POSTS THEMSELVES SAY:\n{extra}" if extra else "")
+    if not posts: body += "\n\n(No public social media posts could be found for this, so none are counted as evidence.)"
+    return {"text": body, "sources": src}
 
 def _api_videos(ws):
     """Videos from the YouTube Data API (relevance order), or None if there is no key or the API refuses (quota, bad key), so web search is used instead."""
@@ -163,7 +201,7 @@ def _task_videos(ws, ctx, lang):
 def _notes_body(notes, per=2600, total=20000):
     return "\n\n".join(f"### {lab}\n{txt[:per]}" for lab, txt in notes)[:total]
 
-_RULES = ("Rules: base everything on the notes and what the candidate told us; do not invent facts, figures or sources. Mark \"confirmed\" only for official sources, \"candidate_reported\" for forums, reviews, videos or anonymous reports, otherwise \"inferred\". "
+_RULES = ("Rules: base everything on the notes and what the candidate told us; do not invent facts, figures or sources. Mark \"confirmed\" only for official sources, \"candidate_reported\" for forums, reviews, videos, social media posts or anonymous reports, otherwise \"inferred\". "
           "Where official information and candidate reports disagree, say so. Keep each item to one or two plain sentences and keep every figure with its year and source (market size, funding, pass rates, salaries, dates). Be specific to this person and this opportunity, not generic. "
           "For anything from a video put the video title and the [mm:ss] in \"source\". For \"seen_in\" count how many separate sources agree (1 if just one). If the notes have no figure for something, say it was not found instead of guessing.")
 
@@ -173,7 +211,7 @@ def _synth_prompt(ws, ctx, lang, notes, sc=1.0, short=False):
     secs = "\n".join(f'- key "{s["key"]}", title "{s["title"]}": {s["ask"]}' for s in k["sections"])
     return f"""Using the research notes below, write this candidate's research briefing for a {k['label'].lower()} interview. Return JSON only.
 {ctx}
-RESEARCH NOTES BY ANGLE (official facts, then what real candidates report in forums, reviews and videos):
+RESEARCH NOTES BY ANGLE (official facts, then what real candidates report in forums, reviews, videos and social media posts):
 {_notes_body(notes, int(2600 * sc), int(20000 * sc))}
 {_RULES} Write in {lang}.{SHORT if short else ""}
 SECTIONS (4 to 6 items each, use exactly these keys, cover every section):
@@ -197,7 +235,7 @@ RESEARCH NOTES BY ANGLE:
 {_notes_body(notes, int(2200 * sc), int(14000 * sc))}
 {_RULES} Write in {lang}.{SHORT if short else ""}
 JSON shape: {{"findings": [{{"claim": str, "kind": "confirmed|candidate_reported|inferred", "confidence": "low|medium|high", "relevance": str, "source_hint": str, "source_date": str}}],
-"likely_questions": [{{"q": str, "why": "why they ask it", "strong": "what a strong answer contains, under 30 words", "seen_in": int, "origin": "official|forum|video|inferred"}}],
+"likely_questions": [{{"q": str, "why": "why they ask it", "strong": "what a strong answer contains, under 30 words", "seen_in": int, "origin": "official|forum|video|social|inferred"}}],
 "questions_to_ask": [str], {task},
 "panel": {{"found": true|false, "count": 1-3, "roles": [str], "why": "one sentence naming the evidence", "status": "confirmed|candidate_reported|inferred"}},
 "required_documents": [{{"key": "short_snake_case", "label": "e.g. Bank statements of your sponsor", "why": "why the interviewers need it", "must": true|false}}]}}
@@ -246,7 +284,7 @@ def _clean(d, ws):
     topics = [{"label": str(t.get("label", ""))[:80], "importance": _int(t.get("importance")), "status": _status(t.get("status"))}
               for t in d.get("topics", []) if isinstance(t, dict) and t.get("label")][:10]
     lq = [{"q": str(q.get("q", ""))[:300], "why": str(q.get("why", ""))[:200], "strong": str(q.get("strong", ""))[:260], "seen_in": _int(q.get("seen_in"), 1, 1, 20),
-           "origin": q.get("origin") if q.get("origin") in ("official", "forum", "video", "inferred") else "inferred"} for q in d.get("likely_questions", []) if isinstance(q, dict) and q.get("q")][:10]
+           "origin": q.get("origin") if q.get("origin") in ("official", "forum", "video", "social", "inferred") else "inferred"} for q in d.get("likely_questions", []) if isinstance(q, dict) and q.get("q")][:10]
     kn = [{"label": str(n.get("label", ""))[:60], "value": str(n.get("value", ""))[:60], "year": str(n.get("year", ""))[:12], "status": _status(n.get("status"), str(n.get("source", ""))), "source": str(n.get("source", ""))[:100]}
           for n in d.get("key_numbers", []) if isinstance(n, dict) and n.get("label") and n.get("value")][:8]
     a = d.get("assessment") if isinstance(d.get("assessment"), dict) else {}
@@ -291,7 +329,7 @@ def _remember(ws, sig, results):
 def run(ws, progress=None):
     """progress(step, steps, found, done, active) is called as work starts and finishes, so the page can show real progress."""
     k = kinds.profile(ws.kind); labels = kinds.research_steps(ws.kind); n = len(k["plan"]); ctx, lang = _ctx(ws), _lang(ws)
-    tasks = [(n, labels[n], lambda: _task_forums(ws, ctx, lang)), (n + 1, labels[n + 1], lambda: _task_videos(ws, ctx, lang))] + \
+    tasks = [(n, labels[n], lambda: _task_forums(ws, ctx, lang)), (n + 1, labels[n + 1], lambda: _task_videos(ws, ctx, lang)), (n + 2, labels[n + 2], lambda: _task_social(ws, ctx, lang))] + \
             [(i, st["label"], (lambda st=st: _task_angle(ws, ctx, lang, st))) for i, st in enumerate(k["plan"])]  # the slow evidence tasks start first
     sig = _sig(ws, ctx); results = dict(_cached(ws, sig)); done, found, errors = set(results), [], []; total = len(tasks)   # angles finished in an earlier attempt are reused, not searched (and paid for) again
     for r in results.values():
@@ -344,13 +382,18 @@ def run(ws, progress=None):
     try: d = _clean(_synthesise(ws, ctx, lang, notes), ws)
     except ai.AIError as e:
         raise ai.AIError(str(e).split(" Last error:")[0] + " Nothing is lost: the research notes are saved, and trying again will only write the briefing.") from e
+    if ws.kind in kinds.COMPETITOR_KINDS:   # understand the product, then find and verify the rivals that really compete with it
+        try:
+            from . import competitors
+            with ai.patient(wait): d["competitors"] = competitors.run(ws, lang)
+        except Exception as e: d["competitors"] = {"items": [], "error": "The competitor check could not finish this time. Press Run research again to retry it."}
     if skipped: d["partial"] = "Not researched this time (too slow or unavailable): " + "; ".join(labels[i] for i in skipped) + ". Press Run research again to fill these in; the finished parts are kept."
     ws.findings.all().delete()
     for f in d.get("findings", [])[:20]:
         if isinstance(f, dict): Finding.objects.create(workspace=ws, **_finding(f, date.today().year))
     d.pop("findings", None)
     sources.sort(key=lambda s: {"official": 0, "web": 1, "community": 2}.get(s["tier"], 1))  # most trustworthy first
-    d["coverage"] = {"sources": len(sources), "official": sum(1 for s in sources if s["tier"] == "official"), "community": sum(1 for s in sources if s["tier"] == "community" and not s.get("video")),
+    d["coverage"] = {"sources": len(sources), "official": sum(1 for s in sources if s["tier"] == "official"), "community": sum(1 for s in sources if s["tier"] == "community" and not s.get("video") and not s.get("social")), "social": sum(1 for s in sources if s.get("social")),
                      "videos": sum(1 for s in sources if s.get("video")), "heard": sum(1 for s in sources if s.get("heard")), "pages_read": sum(1 for s in sources if s.get("read")), "angles_failed": len(errors)}
     ws.research = d; ws.sources = [dict(s, retrieved=str(date.today())) for s in sources[:30]]; ws.researched_at = timezone.now(); ws.research_cache = {}
     ws.save(update_fields=["research", "sources", "researched_at", "research_cache"])  # only these fields: the job state and progress are updated separately while this runs
@@ -367,4 +410,8 @@ def brief(ws, limit=1800):
     for s in r.get("sections", []):
         if isinstance(s, dict) and s.get("key") in ("fit", "objections", "consistency", "process", "competition", "reports") and s.get("items"):
             out.append(f"{s.get('title', '').upper()}: " + "; ".join(i.get("point", "") for i in s["items"][:3]))
+    if ws.kind in kinds.COMPETITOR_KINDS:
+        from . import competitors
+        line = competitors.brief_line(ws)
+        if line: out.append(line)
     return "\n".join(out)[:limit]

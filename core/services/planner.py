@@ -11,6 +11,7 @@ import re
 from datetime import date, timedelta
 from urllib.parse import quote_plus
 from django.utils import timezone
+from . import team
 from ..models import PrepTask, Evaluation, CATS
 
 PER_DAY = 4   # a missed task is moved to the next day that has room for it (at most this many per interview per day)
@@ -27,10 +28,10 @@ def is_interview(t): return t.kind == "mock" or bool(_MOCK.search(t.title or "")
 def reschedule_missed(user, day=None):
     """Move every unfinished task from a past day forward. Returns how many were moved."""
     day = day or today()
-    missed = list(PrepTask.objects.filter(workspace__user=user, done=False, due__lt=day).select_related("workspace").order_by("-priority", "due", "id"))
+    missed = list(team.tasks_for(user).filter(done=False, due__lt=day).select_related("workspace").order_by("-priority", "due", "id"))
     if not missed: return 0
     load = {}
-    for ws_id, d in PrepTask.objects.filter(workspace__user=user, done=False, due__gte=day).values_list("workspace_id", "due"): load[(ws_id, d)] = load.get((ws_id, d), 0) + 1
+    for ws_id, d in team.tasks_for(user).filter(done=False, due__gte=day).values_list("workspace_id", "due"): load[(ws_id, d)] = load.get((ws_id, d), 0) + 1
     for t in missed:
         ws = t.workspace; last = ws.date if (ws.date and not ws.general and ws.date >= day) else None
         d = day
@@ -80,34 +81,42 @@ def card(t, ws=None, day=None):
     ws = ws or t.workspace; day = day or today()
     moved = bool(t.orig_due and t.orig_due != t.due and not t.done)
     return {"id": t.pk, "title": t.title, "detail": t.detail, "kind": t.kind, "category": t.category, "done": t.done, "due": t.due.isoformat(), "when": day_label(t.due, day),
-            "state": "done" if t.done else "today" if t.due <= day else "later", "can": can_complete(t, day), "workspace": ws.title, "workspace_id": ws.pk,
+            "state": "done" if t.done else "today" if t.due <= day else "later", "can": can_complete(t, day), "workspace": ws.title, "workspace_id": ws.pk, "who": (team.display(t.assignee) if t.assignee_id else ("Whole team" if ws.team.exclude(status="declined").exists() else "")),
             "moved": ({"from": t.orig_due.isoformat(), "label": f"{t.orig_due:%a %d %b}"} if moved else None), "auto": t.auto_added, "links": links(t, ws)}
 
 
 def notifications(user, day=None):
     """What the bell shows. Built fresh each time from the plan, so it can never be out of date."""
     day = day or today(); items = []
-    todo = list(PrepTask.objects.filter(workspace__user=user, done=False, due__lte=day).select_related("workspace").order_by("-priority", "due", "id"))
+    todo = list(team.tasks_for(user).filter(done=False, due__lte=day).select_related("workspace").order_by("-priority", "due", "id"))
     for t in todo:
         c = card(t, day=day)
         if c["moved"]: msg = f"You missed this on {c['moved']['label']}, so it moved to {day_label(t.due, day).lower()}. Finish it today to stay on track."
         else: msg = t.detail or "Planned for today."
         items.append({"type": "task", "title": t.title, "message": msg, "workspace": t.workspace.title, "task": c})
-    tomorrow = list(PrepTask.objects.filter(workspace__user=user, done=False, due=day + timedelta(days=1)).select_related("workspace"))
+    tomorrow = list(team.tasks_for(user).filter(done=False, due=day + timedelta(days=1)).select_related("workspace"))
     if tomorrow: items.append({"type": "info", "title": f"Tomorrow: {len(tomorrow)} task{'s' if len(tomorrow) != 1 else ''}", "message": "; ".join(t.title for t in tomorrow[:5]) + ("." if len(tomorrow) <= 5 else f" and {len(tomorrow) - 5} more."), "workspace": "", "task": None})
-    from ..models import Workspace
-    for w in Workspace.objects.filter(user=user, general=False, date__gte=day, date__lte=day + timedelta(days=3)).order_by("date"):
+    for w in team.workspaces_for(user).filter(general=False, date__gte=day, date__lte=day + timedelta(days=3)).order_by("date"):
         n = (w.date - day).days
         items.append({"type": "interview", "title": f"{w.title}: " + ("your interview is today" if n == 0 else "your interview is tomorrow" if n == 1 else f"your interview is in {n} days"), "message": "Run one more practice interview and review your weakest area.", "workspace": w.title, "task": None, "workspace_id": w.pk})
-    done_today = PrepTask.objects.filter(workspace__user=user, done=True, due=day).count()
+    for m in team.pending_for(user):   # invitations to present together
+        items.insert(0, {"type": "invite", "title": f"{team.display(m.invited_by)} invited you to present together", "message": f"Team for \"{m.workspace.title}\". Accept to share the plan and tasks, fill in your own part and pick a time with the team.", "workspace": m.workspace.title, "task": None, "invite": m.pk})
+    from ..models import TeamMember, TimeSlot
+    recent = timezone.now() - timedelta(days=3)
+    for m in TeamMember.objects.filter(workspace__user=user, responded_at__gte=recent).exclude(status="invited").select_related("workspace"):
+        items.append({"type": "info", "title": f"{m.name or m.email} {'joined' if m.status == 'accepted' else 'declined'} your team", "message": ("They now see the workspace and have a share of the tasks." if m.status == "accepted" else "You can invite someone else from the team page."), "workspace": m.workspace.title, "task": None, "workspace_id": m.workspace_id, "link": f"/w/{m.workspace_id}/team/"})
+    for sl in TimeSlot.objects.filter(workspace__in=team.workspaces_for(user), chosen=False, starts__gte=timezone.now()).select_related("workspace"):
+        if (sl.votes or {}).get(str(user.id)) is None:
+            items.append({"type": "info", "title": f"Vote on a time: {sl.workspace.title}", "message": f"A practice interview was proposed for {timezone.localtime(sl.starts):%a %d %b at %H:%M}.", "workspace": sl.workspace.title, "task": None, "workspace_id": sl.workspace_id, "link": f"/w/{sl.workspace_id}/team/"})
+    done_today = team.tasks_for(user).filter(done=True, due=day).count()
     if not todo and done_today: items.insert(0, {"type": "ok", "title": "Everything for today is done", "message": f"{done_today} task{'s' if done_today != 1 else ''} completed. Rest, or run a practice interview.", "workspace": "", "task": None})
-    return {"items": items, "count": len(todo), "today": day.isoformat()}
+    return {"items": items, "count": len(todo) + sum(1 for i in items if i["type"] == "invite" or (i["type"] == "info" and i.get("link"))), "tasks": len(todo), "today": day.isoformat()}
 
 
 def progress(user):
     """Numbers for the dashboard graphs: the score over time, each skill's first and latest score, daily completed tasks and how consistent the person has been."""
     day = today()
-    evs = list(Evaluation.objects.filter(session__workspace__user=user, session__status="done", overall__isnull=False).select_related("session__workspace").order_by("session__started_at", "id"))
+    evs = list(Evaluation.objects.filter(session__workspace__in=team.workspaces_for(user), session__status="done", overall__isnull=False).select_related("session__workspace").order_by("session__started_at", "id"))
     series = [{"label": f"{timezone.localtime(e.session.started_at):%d %b}", "score": e.overall, "title": e.session.workspace.title, "report": e.session_id} for e in evs]
     cats = []
     for key, label in CATS:
@@ -123,12 +132,12 @@ def progress(user):
         trend.update(state=state, delta=d, recent=r, text=f"{word}: {d:+d} points since your first interview, {r:+d} since the last one.")
     window = [day - timedelta(days=i) for i in range(13, -1, -1)]
     done_by = {}
-    for ts in PrepTask.objects.filter(workspace__user=user, done=True, completed_at__isnull=False, completed_at__date__gte=window[0]).values_list("completed_at", flat=True):
+    for ts in team.tasks_for(user).filter(done=True, completed_at__isnull=False, completed_at__date__gte=window[0]).values_list("completed_at", flat=True):
         k = timezone.localtime(ts).date(); done_by[k] = done_by.get(k, 0) + 1
     activity = {"labels": [f"{d:%d %b}" for d in window], "values": [done_by.get(d, 0) for d in window]}
     streak = 0; d = day if done_by.get(day) else day - timedelta(days=1)   # a day that is not over yet does not break the streak
     while done_by.get(d): streak += 1; d -= timedelta(days=1)
-    due_total = PrepTask.objects.filter(workspace__user=user, due__lte=day).count(); due_done = PrepTask.objects.filter(workspace__user=user, due__lte=day, done=True).count()
-    moved = PrepTask.objects.filter(workspace__user=user, orig_due__isnull=False).count()
+    due_total = team.tasks_for(user).filter(due__lte=day).count(); due_done = team.tasks_for(user).filter(due__lte=day, done=True).count()
+    moved = team.tasks_for(user).filter(orig_due__isnull=False).count()
     return {"series": series, "cats": cats, "trend": trend, "activity": activity, "streak": streak, "completion": round(100 * due_done / due_total) if due_total else None,
             "moved": moved, "week_done": sum(activity["values"][-7:])}

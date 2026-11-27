@@ -26,7 +26,13 @@ def research_task(ws_id):
     _tracked(ws_id, lambda ws: agents.research(ws, _progress(ws_id)))
 
 @shared_task
-def plan_task(ws_id): _tracked(ws_id, agents.prepare)
+def plan_task(ws_id):
+    _tracked(ws_id, agents.prepare)
+    try:   # a team's plan is shared out between everyone as soon as it exists
+        from .models import Workspace
+        from .services import team
+        team.split_tasks(Workspace.objects.get(pk=ws_id))
+    except Exception: pass
 
 _PRE = {}   # session id -> (turn count, future): an evaluation started early, while the closing words are spoken
 
@@ -70,7 +76,7 @@ def finalize_task(sid, frames, camera=None):
         if camera: s.vision = {**(s.vision or {}), "camera": camera}
         s.status = "done"; s.save(update_fields=["status"] + (["vision"] if (v or camera) else []))   # the report opens now; the bookkeeping below only touches the next session's plan
         if ev is not None:
-            try: logic.update_memory(s.workspace.user, ev.scores, notes); logic.adjust_plan(s.workspace); panelplan.adapt_after_session(s.workspace)
+            try: logic.update_memory(s.workspace.user, ev.scores, notes, (ev.breakdown or {}).get("confidence")); logic.adjust_plan(s.workspace); panelplan.adapt_after_session(s.workspace)
             except Exception: pass
     except Exception:
         Session.objects.filter(pk=sid).update(status="error"); raise

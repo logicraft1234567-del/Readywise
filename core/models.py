@@ -5,7 +5,7 @@ CATS = [("technical","Technical"),("system_design","System design"),("communicat
         ("behavioural","Behavioural"),("strategic","Strategic thinking"),("company","Company knowledge")]
 CAT_LABEL = dict(CATS)
 KINDS = [("startup","Startup job"),("employment","Corporate job"),("internship","Internship"),("graduate","Graduate programme"),("admission","University admission"),
-         ("scholarship","Scholarship"),("visa","Visa practice"),("fellowship","Fellowship"),("pitch","Investor pitch"),("certification","Certification")]
+         ("scholarship","Scholarship"),("visa","Visa practice"),("fellowship","Fellowship"),("pitch","Investor pitch"),("hackathon","Hackathon presentation"),("certification","Certification")]
 LEVELS = [("standard","Standard"),("advanced","Advanced"),("expert","Expert")]
 
 class Profile(models.Model):
@@ -46,6 +46,7 @@ class Workspace(models.Model):
     research_cache = models.JSONField(default=dict, blank=True)   # notes of the research angles already finished, so a run that hit a rate limit resumes instead of starting over
     docs_plan = models.JSONField(default=list, blank=True)   # documents the quick check in the new-interview flow found; the full research later adds to or replaces them
     details = models.JSONField(default=dict, blank=True); documents = models.JSONField(default=dict, blank=True); allocation = models.JSONField(default=dict, blank=True); known_interviewers = models.TextField(blank=True)
+    scheduled_at = models.DateTimeField(null=True, blank=True)   # the time the whole team agreed on for the practice interview
     created = models.DateTimeField(auto_now_add=True)
     def weights(self):
         from .services import kinds
@@ -66,6 +67,7 @@ class PrepTask(models.Model):
     done = models.BooleanField(default=False); priority = models.IntegerField(default=5); auto_added = models.BooleanField(default=False)
     completed_at = models.DateTimeField(null=True, blank=True)   # when it was ticked off: drives the progress graphs
     orig_due = models.DateField(null=True, blank=True)           # the day it was first planned for, set when a missed task is moved forward
+    assignee = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name="assigned_tasks")   # who does it in a team; empty means the whole team (or a solo plan)
     query = models.CharField(max_length=160, blank=True, default="")        # a short search phrase for the "read" and "watch" links under the task
     class Meta: ordering = ["due", "-priority", "id"]
 
@@ -98,6 +100,7 @@ class Evaluation(models.Model):
     unverified = models.JSONField(default=list, blank=True)     # claims the candidate made that nothing in the interview supported
     overall = models.IntegerField(null=True, blank=True)       # the interview score out of 100
     plain = models.JSONField(default=dict, blank=True)   # the plain-language report the candidate reads first: headline, what went well, top priorities to improve, next steps
+    breakdown = models.JSONField(default=dict, blank=True)   # how the score was built (scoring.compute): dimensions, confidence, coverage, critical requirements
     verdict = models.CharField(max_length=40, blank=True, default=""); checks = models.JSONField(default=list, blank=True)   # facts the candidate stated that the online check found wrong or unsupported
 
 class MemoryItem(models.Model):
@@ -108,3 +111,23 @@ class MemoryItem(models.Model):
 
 class Contact(models.Model):
     name = models.CharField(max_length=80); email = models.EmailField(); message = models.TextField(); created = models.DateTimeField(auto_now_add=True)
+
+
+class TeamMember(models.Model):
+    """A teammate who presents together with the coordinator (the workspace owner). Invited by Gmail or any email; shares the workspace once they accept."""
+    workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="team")
+    email = models.EmailField(); user = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name="team_roles")
+    name = models.CharField(max_length=80, blank=True)
+    status = models.CharField(max_length=10, default="invited")   # invited / accepted / declined
+    part = models.TextField(blank=True)                           # what this person will present or cover, in their own words
+    details = models.JSONField(default=dict, blank=True)
+    invited_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name="invites_sent")
+    created = models.DateTimeField(auto_now_add=True); responded_at = models.DateTimeField(null=True, blank=True)
+    class Meta: unique_together = ("workspace", "email")
+
+class TimeSlot(models.Model):
+    """A time proposed for the team's practice interview. It is confirmed when every accepted member (and the coordinator) has said yes."""
+    workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="slots")
+    starts = models.DateTimeField(); proposed_by = models.ForeignKey(User, on_delete=models.CASCADE)
+    votes = models.JSONField(default=dict, blank=True)   # {"<user id>": "yes" | "no"}
+    chosen = models.BooleanField(default=False); created = models.DateTimeField(auto_now_add=True)

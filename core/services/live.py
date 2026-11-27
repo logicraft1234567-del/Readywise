@@ -62,7 +62,7 @@ Question themes (inspiration only, adapt, never read out): {iv.question_bank.rep
 {plan_block(sess, iv, panel)}
 ROLE LENS: {agents.role_lens(ws)}
 INTERVIEW BRIEF: {agents._brief(ws, 1400)}
-INTERVIEW TYPE GUIDE: {agents.kinds.profile(ws.kind)['guide']}
+{agents.past_context(sess, 14)}INTERVIEW TYPE GUIDE: {agents.kinds.profile(ws.kind)['guide']}
 DIFFICULTY (set by the system): {ws.difficulty}. The candidate prefers a {style} interviewer. Never be abusive or humiliating. Conduct the whole interview in {lang}.
 {agents.CONDUCT}
 HOW TO SPEAK ON THE CALL:

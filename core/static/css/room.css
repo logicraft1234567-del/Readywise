@@ -202,3 +202,11 @@ body.in-room .rm-live{height:100dvh;min-height:0}
 .b-brief{display:grid;gap:.55rem;font-size:.92rem;line-height:1.5}
 .b-row{display:grid;gap:.1rem}.b-row b{font-size:.78rem;font-weight:600;color:var(--mut)}
 .b-row code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.86rem;background:var(--chipbg);padding:.3rem .5rem;border-radius:var(--r1);overflow-wrap:anywhere;width:fit-content;max-width:100%}
+
+/* room: the code toolbar and typed-answer buttons shrink to short labels on phones */
+.rm-btn .bs{display:none}
+@media (max-width:640px){
+  .rm-btn .bl:has(+ .bs){display:none}.rm-btn .bs{display:inline}
+  .rm-wbar .rm-btn{padding:.45rem .7rem}
+  .rm-type .rm-btn{padding:.6rem .9rem}
+}

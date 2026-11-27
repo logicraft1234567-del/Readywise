@@ -107,3 +107,11 @@
 .three{display:grid;grid-template-columns:repeat(3,1fr);gap:2cqw;width:76cqw;text-align:left}.three .col p{font-size:1.35cqw;color:#D6DDF0;margin:0 0 .8cqh;line-height:1.4}
 .film .cap{font-size:1.6cqw;min-height:0;color:#C7D0E8}
 .film .two .nt{font-size:1.3cqw;padding:1cqw 1.2cqw;margin-bottom:.9cqw}
+
+/* film end-card buttons: keep them readable on a portrait phone, where cqw units get tiny */
+.st-btn .bs{display:none}
+@media (max-aspect-ratio:1/1){
+  .st-btn{font-size:max(1.6cqw,.9rem);padding:max(1.3cqw,.65rem) max(2.4cqw,1.1rem);border-radius:max(.9cqw,.5rem);white-space:nowrap}
+  .st-btn .bl{display:none}.st-btn .bs{display:inline}
+  .st-row{flex-wrap:wrap;gap:.6rem}
+}

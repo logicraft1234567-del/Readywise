@@ -9,7 +9,7 @@
 <label class="l">Education</label><textarea class="field" name="education" rows="2">{{ p.education }}</textarea><label class="l">Work experience</label><textarea class="field" name="experience" rows="3">{{ p.experience }}</textarea>
 <label class="l">Skills</label><input class="field" name="skills" value="{{ p.skills }}"><label class="l">Career interests</label><input class="field" name="interests" value="{{ p.interests }}">
 <label class="l">CV (PDF or Word){% if p.cv_text %} <span class="tag t-confirmed">uploaded</span>{% endif %}</label><input class="field" type="file" name="cv" accept=".pdf,.docx,.txt">
-<div class="flex gap-3 mt-6"><button class="btn solid">Save profile</button>{% if p.cv_text %}<button class="btn" name="reanalyse" value="1">Save and re-analyse CV</button>{% endif %}</div></form>
+<div class="flex gap-3 mt-6"><button class="btn solid">Save profile</button>{% if p.cv_text %}<button class="btn" name="reanalyse" value="1"><span class="bl">Save and re-analyse CV</span><span class="bs">Re-analyse</span></button>{% endif %}</div></form>
 <div class="glass p-6 h-fit"><h2 class="text-lg">CV analysis</h2>{% if p.cv_profile %}<p class="text-sm mt-2">{{ p.cv_profile.summary }}</p>{% if p.cv_profile.seniority %}<span class="chip mt-3">{{ p.cv_profile.seniority }}</span>{% endif %}
 <h3 class="text-sm mt-4">Skills</h3><div class="flex flex-wrap gap-2 mt-1">{% for s in p.cv_profile.skills %}<span class="chip">{{ s }}</span>{% endfor %}</div>
 <h3 class="text-sm mt-4">Strengths</h3><ul class="list-disc pl-5 text-sm">{% for s in p.cv_profile.strengths %}<li>{{ s }}</li>{% endfor %}</ul>

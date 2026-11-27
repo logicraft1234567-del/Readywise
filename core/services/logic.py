@@ -2,11 +2,14 @@
 from datetime import date, timedelta
 from ..models import *
 
-def update_memory(user, scores, notes):
+def update_memory(user, scores, notes, confidence=None):
+    """Fold one interview's category scores into the long-term record. The weight of the new result follows how well the interview was evidenced:
+    a result built on thin evidence moves the record only a little, so one short or unlucky session cannot rewrite it."""
+    a = {"high": 0.4, "medium": 0.3, "low": 0.15}.get(confidence, 0.4)
     for cat, sc in (scores or {}).items():
         if cat not in CAT_LABEL or sc is None: continue
         m, created = MemoryItem.objects.get_or_create(user=user, category=cat, defaults={"score": float(sc)})
-        if not created: m.score = round(0.6 * m.score + 0.4 * float(sc), 1)
+        if not created: m.score = round((1 - a) * m.score + a * float(sc), 1)
         m.observations += 1; m.note = (notes or {}).get(cat, m.note)[:300]; m.save()
 
 def adjust_plan(ws):

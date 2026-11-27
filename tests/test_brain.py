@@ -148,5 +148,6 @@ def test_not_demonstrated_needs_cited_evidence_and_counts_against_the_score(env,
              {"key": "judgment", "rating": "demonstrated", "score": 80, "evidence": ["named a trade-off"], "missing": [], "confidence": "medium", "reason": "ok"}]
     ev = _finished(env, monkeypatch, comps, overall=70); by = {c["key"]: c for c in ev.competencies}
     assert by["tech_depth"]["rating"] == "not_demonstrated" and by["tech_depth"]["score"] == 15
-    # tech_depth (weight 9) at 15 and judgment (weight 5) at 80 -> weighted 38.2; 0.6*70 + 0.4*38.2 = 57
-    assert ev.overall == 57 and ev.verdict == "Borderline"
+    # the evaluator's own "overall" of 70 does not decide the score: technical (30%) at 15 and judgment (10%) at 80 -> (15*30 + 80*10) / 40 = 31
+    assert ev.overall == 31 and ev.verdict == "Not ready"
+    assert ev.breakdown["critical"]["not_met"] == 1 and ev.breakdown["critical"]["items"][0]["key"] == "tech_depth"   # the failed requirement is named

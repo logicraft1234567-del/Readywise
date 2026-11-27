@@ -151,7 +151,7 @@ function stopSpeech() { token++; try { speechSynthesis.cancel(); } catch (e) { }
 async function next(answer, tag) {
   phase = "thinking"; setState("The panel is thinking…"); setSpeaker(null); $("send").disabled = true; $("pip").classList.remove("talking"); $("mestate").textContent = "Ready";
   try {
-    const d = await post(`/room/${SID}/turn/`, { answer, tag }); if (ending) return; retryNext = false; current = d; lastSpeaker = d.speaker; qCount = d.n; progress(d);
+    const d = await post(`/room/${SID}/turn/`, { answer, tag, t: t0 ? Math.floor((Date.now() - t0) / 1000) : undefined }); if (ending) return; retryNext = false; current = d; lastSpeaker = d.speaker; qCount = d.n; progress(d);
     logMsg(d.speaker.name + ", " + d.speaker.position, d.text, "i"); caption(d.text); setSpeaker(d.speaker.id); setState(d.speaker.name + " is speaking" + (ALLOW_INT && cap ? " (start talking to interrupt)" : ""));
     if (d.challenge) openBench(d.challenge);
     playVoice(d.speaker, { turn_id: d.turn_id }, d.text, () => { setSpeaker(null); if (d.end) { setState(d.reason === "unprofessional" ? "The interviewer is ending the interview…" : "The panel is closing the meeting…"); setTimeout(() => finish(false, d.reason), 900); return; } if (d.intro) { next(null); return; } startAnswer(); });
