@@ -104,7 +104,38 @@ def _fetch_all(urls):
     with ThreadPoolExecutor(max_workers=4) as ex: return list(ex.map(evidence.fetch_text, urls))
 
 def _task_angle(ws, ctx, lang, step):
+    if step.get("deep") == "competitors": return _task_competitors(ws, ctx, lang, step)
     text, src = _search(_angle_prompt(ws, ctx, lang, step)); return {"text": text, "sources": src}
+
+def _product_brief(ws, ctx):
+    """Step one of the competitor research: say exactly what the product is, who it is for and what job it does, from what the team wrote and their documents. No search."""
+    prompt = (f"Read what the team told us about their product and describe it exactly, so that real competitors can be found. Use only the text below; do not search.\n{ctx}\n"
+              'Return JSON only: {"what": "what it is, one sentence", "customer": "who uses or pays for it, specific", "job": "the job the customer hires it for", "market": "where it operates (country or region) and the segment", '
+              '"category": "the product category in the words customers or investors use", "search_terms": ["6 to 8 short phrases to find competitors: category words and the problem in the customer\'s own words"], '
+              '"today_they_use": ["what customers use today instead, including non-software substitutes"], "not_competitors": ["kinds of companies that look similar but are NOT competitors, and why, one line each"]}')
+    try: d = ai.parse_json(ai.call(prompt, json_mode=True, temperature=0.2, max_tokens=900)[0])
+    except Exception: return {}
+    return {k: v for k, v in d.items() if k in ("what", "customer", "job", "market", "category", "search_terms", "today_they_use", "not_competitors")} if isinstance(d, dict) else {}
+
+def _task_competitors(ws, ctx, lang, step):
+    """Competitors that REALLY compete: understand the product, search with its own words, then check every company against the same customer and the same job."""
+    pb = _product_brief(ws, ctx); label = kinds.profile(ws.kind)["label"].lower()
+    summary = "; ".join(f"{k}: {v if isinstance(v, str) else ', '.join(str(x) for x in v)}" for k, v in pb.items())[:1700] or "not available, work it out from the text above"
+    find = (f"You are the research agent for a {label}. Search the web for the companies, apps and products that REALLY compete with this team's product.\n{ctx}\nPRODUCT AS UNDERSTOOD: {summary}\n"
+            "A competitor serves the same customer for the same job, in the same market or one the team would be compared with (say when a rival is global or from another region). Label each one DIRECT (same customer, same job), INDIRECT (same customer, a different way of solving it) or SUBSTITUTE (what people do today instead, even without software). "
+            "NOT competitors: companies that only share an industry or a technology, big platforms that do not offer this, products that are shut down (unless that is a lesson), and anything you cannot confirm exists. "
+            "Search with the search terms, then look at each company's own site. Give 5 to 8 competitors. For each: name and website; DIRECT, INDIRECT or SUBSTITUTE; what it does and for whom; price or business model; funding, size or traction with the year; why it competes with this product; one honest weakness. "
+            f"Then one line on where this team's product is different or weaker. If you cannot confirm something write 'not found'. {RULES}\nWrite in {lang}.")
+    text, src = _search(find)
+    check = (f"Check this competitor list. For each company confirm from reliable sources that it exists, is still operating, and really serves the same customer for the same job as this product. "
+             f"Remove any that do not and say why in one line. Keep the others, and add a verdict (confirmed or unclear) to each.\nPRODUCT: {pb.get('what', '')} | CUSTOMER: {pb.get('customer', '')} | JOB: {pb.get('job', '')}\nLIST:\n{text[:5500]}\n{RULES}\nWrite in {lang}.")
+    try: vtext, vsrc = _search(check)
+    except ai.AIError: vtext, vsrc = "", []
+    seen, sources = set(), []
+    for s_ in list(src) + list(vsrc):
+        if s_.get("url") and s_["url"] not in seen: seen.add(s_["url"]); sources.append(s_)
+    head = f"PRODUCT AS UNDERSTOOD: {summary}\nCOMPETITORS (checked against the same customer and the same job; labelled DIRECT, INDIRECT or SUBSTITUTE):\n"
+    return {"text": head + (vtext if len(vtext) > 200 else text), "sources": sources, "product": pb}
 
 def _task_forums(ws, ctx, lang):
     text, src = _search(_forum_prompt(ws, ctx, lang))
@@ -171,6 +202,8 @@ def _synth_prompt(ws, ctx, lang, notes, sc=1.0, short=False):
     """Part 1 of the briefing: the sections people read, plus the summary, topics and weights."""
     k = kinds.profile(ws.kind)
     secs = "\n".join(f'- key "{s["key"]}", title "{s["title"]}": {s["ask"]}' for s in k["sections"])
+    if ws.kind in kinds.TEAM_KINDS: secs += ("\nCOMPETITION RULES: in the \"competition\" section use ONLY companies the notes name and mark as confirmed. Start each item with the company name and DIRECT, INDIRECT or SUBSTITUTE, then why it competes with THIS product and how this product differs. "
+                                              "Never add a company the notes did not confirm, and never list one that only shares an industry. If fewer than three real competitors were confirmed, say so plainly in the first item.")
     return f"""Using the research notes below, write this candidate's research briefing for a {k['label'].lower()} interview. Return JSON only.
 {ctx}
 RESEARCH NOTES BY ANGLE (official facts, then what real candidates report in forums, reviews and videos):
@@ -309,7 +342,7 @@ def run(ws, progress=None):
     blocks = [order]   # one list in step order; run_pass deals the steps out to the keys in turn
     now = {}                                                                                                     # block -> the step it is on right now
     mode = {"mult": 1.0, "shift": 0}   # second pass: more time, and a different key from the one that struggled
-    def limit(i): return (BUDGET_EVIDENCE if i >= n else BUDGET_ANGLE) * mode["mult"]
+    def limit(i): return (BUDGET_EVIDENCE if i >= n else BUDGET_ANGLE * (2.5 if k["plan"][i].get("deep") else 1)) * mode["mult"]   # the competitor step makes three calls
     def work(b, block):
         for i, lab, fn in block:
             with lock: now[i] = i; tick(set(now.values()))
@@ -341,9 +374,11 @@ def run(ws, progress=None):
             if s["url"] not in seen: seen.add(s["url"]); sources.append(dict(s, angle=lab, tier=evidence.tier(s["url"], ws.company)))
     skipped = sorted(i for i, r in results.items() if r.get("failed"))
     if progress: progress(step=total, steps=labels, found=found[:14], done=list(range(total)), active=[total])
+    prod = next((r_.get("product") for r_ in results.values() if r_.get("product")), None)
     try: d = _clean(_synthesise(ws, ctx, lang, notes), ws)
     except ai.AIError as e:
         raise ai.AIError(str(e).split(" Last error:")[0] + " Nothing is lost: the research notes are saved, and trying again will only write the briefing.") from e
+    if prod: d["product"] = prod
     if skipped: d["partial"] = "Not researched this time (too slow or unavailable): " + "; ".join(labels[i] for i in skipped) + ". Press Run research again to fill these in; the finished parts are kept."
     ws.findings.all().delete()
     for f in d.get("findings", [])[:20]:
@@ -362,9 +397,11 @@ def brief(ws, limit=1800):
     """Short digest of the research for the interviewers and the prep plan, so research really shapes what gets asked."""
     r = ws.research or {}; out = []
     if r.get("summary"): out.append("SUMMARY: " + str(r["summary"]))
+    pr = r.get("product") if isinstance(r.get("product"), dict) else {}
+    if pr.get("what"): out.append(f"THE PRODUCT: {pr.get('what')} Customer: {pr.get('customer', '')}. Job: {pr.get('job', '')}.")
     qs = [q.get("q") for q in r.get("likely_questions", []) if isinstance(q, dict)][:8]
     if qs: out.append("LIKELY QUESTIONS (inspiration only, adapt, never read out): " + " | ".join(qs))
     for s in r.get("sections", []):
         if isinstance(s, dict) and s.get("key") in ("fit", "objections", "consistency", "process", "competition", "reports") and s.get("items"):
-            out.append(f"{s.get('title', '').upper()}: " + "; ".join(i.get("point", "") for i in s["items"][:3]))
+            out.append(f"{s.get('title', '').upper()}: " + "; ".join(i.get("point", "") for i in s["items"][:(6 if s.get("key") == "competition" else 3)]))
     return "\n".join(out)[:limit]

@@ -33,6 +33,7 @@
     store_(t);
     const chips = [`<span class="chip">${esc(KIND[t.kind] || t.kind)}</span>`];
     if (o.showWs) chips.push(`<span class="chip">${esc(t.workspace)}</span>`);
+    if (t.who) chips.push(`<span class="chip soft">${esc(t.who)}</span>`);
     if (t.moved) chips.push(`<span class="chip warn">Moved from ${esc(t.moved.label)}</span>`);
     if (t.auto) chips.push(`<span class="chip soft">Added from your results</span>`);
     if (t.state === "later") chips.push(`<span class="chip">Opens ${esc(t.when)}</span>`);
@@ -97,9 +98,15 @@
   function openPanel() { const p = panel(); p.hidden = false; bell().setAttribute("aria-expanded", "true"); const pop = $("#rw-pop"); if (pop) pop.hidden = true; }
   function noteHTML(it) {
     if (it.task) return taskHTML(it.task, { compact: true, showWs: true, msg: it.message });
-    const a = it.type === "interview" ? `<a href="/w/${it.workspace_id}/#interview">Open the practice room</a>` : "";
+    if (it.type === "invite") return `<article class="np-note invite"><b>${esc(it.title)}</b><p>${esc(it.message)}</p><div class="np-act"><button type="button" class="btn sm solid" data-inv="${it.member}" data-act="accept">Accept</button><button type="button" class="btn sm" data-inv="${it.member}" data-act="decline">Decline</button></div></article>`;
+    const a = it.link ? `<a href="${esc(it.link)}">Open the team page</a>` : it.type === "interview" ? `<a href="/w/${it.workspace_id}/#interview">Open the practice room</a>` : "";
     return `<article class="np-note ${esc(it.type)}"><b>${esc(it.title)}</b><p>${esc(it.message)}</p>${a}</article>`;
   }
+  document.addEventListener("click", async e => {   // accept or decline a team invitation from the bell
+    const b = e.target.closest("[data-inv]"); if (!b) return; b.disabled = true;
+    try { const r = await fetch(`/team/invite/${b.dataset.inv}/${b.dataset.act}/`, { method: "POST", headers: { "X-CSRFToken": csrf(), "X-Requested-With": "XMLHttpRequest" } }), d = await r.json();
+      if (d.ok && d.status === "accepted") location.href = `/w/${d.workspace}/team/`; else location.reload(); } catch (err) { b.disabled = false; }
+  });
   function render(d) {
     last = d;
     const bd = $("#bell-badge"); if (bd) { bd.textContent = d.count; bd.hidden = !d.count; }

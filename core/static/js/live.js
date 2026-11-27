@@ -74,8 +74,23 @@ const Live = (() => {
     if (!cur) cur = { role, text: "", who: lead, node: logMsg(role === "candidate" ? "You" : lead.name + ", " + lead.position, "", role === "candidate" ? "c" : "i") };
     cur.text += text; const t = cur.text.replace(/\s+/g, " ").trim(); cur.node.lastChild.textContent = t; caption(t, role === "candidate"); $("msgs").scrollTop = 1e9;
   }
+  /* ---------- did the model hear the right language? ---------- */
+  const FOREIGN = new Set("le la les des une est que pour avec dans pas je vous nous sur el los las una es por con para como pero não uma você é que também der die das und ist nicht ich ein eine mit sich auf il di che sono una per ma non".split(" "));
+  const ENGLISH = new Set("the and is to of a in that it i you we my for with was on have this are be at as so but not".split(" "));
+  function foreign(t) {   // true when an answer that should be in the interview language came back in another one
+    const letters = (t.match(/\p{L}/gu) || []).length; if (letters < 4) return false;
+    if (meta.latin && (t.match(/\p{Script=Latin}/gu) || []).length / letters < 0.5) return true;   // another alphabet altogether
+    if (meta.lang === "English") { const w = t.toLowerCase().match(/\p{L}+/gu) || []; let f = 0, e = 0; w.forEach(x => { if (FOREIGN.has(x)) f++; if (ENGLISH.has(x)) e++; }); return f >= 3 && f > e; }
+    return false;
+  }
+  let lastNudge = 0;
+  function nudgeRepeat() {   // the interviewer is told once in a while that what it "heard" was in the wrong language, and asks you to repeat
+    if (Date.now() - lastNudge < 20000) return; lastNudge = Date.now();
+    enqueue(`Your transcription of the candidate's last answer came out in the wrong language. The candidate speaks ${meta.lang}. Do not respond to what you thought you heard. Say in one short sentence that you did not catch that, and ask them to repeat their last answer.`, "lang", true);
+  }
   function endTurn() {
-    if (!cur) return; const role = cur.role, t = cur.text.replace(/\s+/g, " ").trim(); const who = cur.who; if (t) { pending.push({ role, text: t, speaker: role === "candidate" ? undefined : who.id }); shared.push({ who: role === "candidate" ? "Candidate" : who.name, text: t }); } cur = null; flush();
+    if (!cur) return; const role = cur.role; let t = cur.text.replace(/\s+/g, " ").trim(); const who = cur.who;
+    if (role === "candidate" && t && meta && foreign(t)) { cur.node.lastChild.textContent = "(not understood: please repeat)"; t = ""; nudgeRepeat(); }   // never keep or evaluate a mis-heard answer if (t) { pending.push({ role, text: t, speaker: role === "candidate" ? undefined : who.id }); shared.push({ who: role === "candidate" ? "Candidate" : who.name, text: t }); } cur = null; flush();
     if (t && role === "candidate") factUntil = Date.now() + 45000;   // a verified correction may arrive in the next few seconds
     if (t && role === "interviewer") { ivCount++; maybeTask(); }
   }

@@ -167,3 +167,10 @@ def test_a_repeat_interview_is_told_what_was_already_asked(client_in):
 def test_live_brief_forbids_ending_early(client_in):
     c = client_in; ws, s = _open(c); text = live.instruction(s)
     assert "refuses to end it early" in text and "candidate_stopped" in text and "never try before the last part" in text
+
+
+def test_the_live_interviewer_is_told_what_language_the_candidate_speaks(client_in):
+    c = client_in; ws, s = _open(c); text = live.instruction(s)
+    assert "Treat EVERYTHING the candidate says as English" in text and "never switch language" in text and "ask them to repeat" in text
+    from core.models import Profile; p = Profile.objects.get(); p.language = "French"; p.save()
+    assert "Treat EVERYTHING the candidate says as French" in live.instruction(s) and "French" in live.instruction(s) and live.NON_LATIN == {"Arabic", "Hindi", "Chinese (Mandarin)"}

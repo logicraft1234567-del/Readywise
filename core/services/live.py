@@ -4,7 +4,7 @@
 The audio itself travels browser <-> Google. Transcripts come back through room_live_turns and are saved as ordinary Turn rows."""
 import datetime, hashlib, random
 from django.conf import settings
-from . import agents
+from . import agents, langs
 
 FEMALE = ["Kore", "Aoede", "Leda"]
 MALE = ["Puck", "Charon", "Fenrir"]
@@ -19,7 +19,7 @@ def voice_for(iv):
 
 def instruction(sess, iv=None, panel=None):
     """The private brief for one live interviewer. Alone: the only interviewer. On a panel: one member who speaks only when handed the floor."""
-    ws = sess.workspace; panel = panel or [lead_of(sess)]; iv = iv or panel[0]; p = agents.profile_of(ws.user); lang = p.language or "English"; first = (p.full_name or "").split(" ")[0]
+    ws = sess.workspace; panel = panel or [lead_of(sess)]; iv = iv or panel[0]; p = agents.profile_of(agents.candidate_of(sess)); lang = p.language or "English"; first = (p.full_name or "").split(" ")[0]
     if not sess.agenda: agents.build_agenda(sess, panel)   # a solo interviewer owns the whole plan; a panel shares it
     first_line = f"Greet the candidate{(' by first name (' + first + ')') if first else ''}, say who you are and your role in one short sentence"
     if len(panel) == 1:
@@ -46,6 +46,7 @@ INTERVIEW BRIEF: {agents._brief(ws, 1400)}
 INTERVIEW TYPE GUIDE: {agents.kinds.profile(ws.kind)['guide']}
 DIFFICULTY (set by the system): {ws.difficulty}. The candidate prefers a {style} interviewer. Never be abusive or humiliating. Conduct the whole interview in {lang}.
 {agents.CONDUCT}
+LANGUAGE: the candidate speaks {lang} (accents vary a lot, and some people speak softly or quickly). Treat EVERYTHING the candidate says as {lang}. Never interpret their speech as another language, never translate it, never switch language, and answer only in {lang}. If a word or a sentence is unclear, ask them to repeat it in one short sentence; do not guess, and do not respond to words you are not sure they said.
 HOW TO SPEAK ON THE CALL:
 - You hear the candidate's real voice directly. Respond to what they actually said, with something concrete from it (a claim, number, tool, decision or gap). If you could not make out the words, say so briefly and ask them to repeat; never guess.
 - Speak like a person: one to three short sentences per turn, then stop and listen. Ask exactly ONE question at a time. No lists, no headings, no stage directions, no reading out plans or scores.
@@ -57,6 +58,8 @@ HOW TO SPEAK ON THE CALL:
 - While the candidate works on a hands-on task, stay quiet. They may think aloud: do not comment on every sentence. Speak only if they ask you something or say they are stuck, and never coach them towards the answer.
 - The interview lasts {ws.duration} minutes. Do not wrap up just because you have asked a few questions: if you run out of planned areas, go deeper on the weakest evidence. You can end the interview yourself by calling the function end_interview, in exactly three situations. (1) It has genuinely run its course: every area is covered with enough evidence AND most of the interview time has passed (the system refuses to end it early, so never try before the last part of the time). Use reason "completed". (2) The candidate says they want to stop: do not end at once; say how much time is left and ask once if they really want to stop, and only if they confirm, use reason "candidate_stopped". (3) The candidate is unprofessional: abusive, insulting, discriminatory, sexually inappropriate, clearly not taking the interview seriously, refusing to engage, or deliberately wasting time. First say once, calmly, what you expect; if it continues, end it. For severe abuse or harassment, end it at once. Use reason "unprofessional". Always say your closing words out loud FIRST (completed or candidate_stopped: thank the candidate and say what happens next; unprofessional: one calm, professional sentence that you are ending the interview because of the candidate's conduct), THEN call end_interview, then say nothing more. Never end it for nervousness, a pause to think, a weak answer or a technical problem.
 - When told that time is nearly up, wrap up the way the real interview would end: a closing remark, thank the candidate and say what happens next in the process. Ask no new question, not even 'do you have any questions', and say goodbye: the meeting ends when you stop speaking."""
+
+NON_LATIN = {"Arabic", "Hindi", "Chinese (Mandarin)"}   # languages not written in Latin letters (a wrong-script transcription can be spotted for the others)
 
 def voices_for(panel):
     """A different voice for every panelist (the pools hold three per gender, the most a panel has)."""
@@ -79,7 +82,7 @@ def mint(sess, only=None):
     Raises on any failure; the caller falls back to the standard interview."""
     from concurrent.futures import ThreadPoolExecutor
     from google import genai
-    ws = sess.workspace; panel = agents.session_panel(sess); voices = voices_for(panel); now = datetime.datetime.now(tz=datetime.timezone.utc)
+    ws = sess.workspace; panel = agents.session_panel(sess); voices = voices_for(panel); lang = agents.profile_of(agents.candidate_of(sess)).language or "English"; now = datetime.datetime.now(tz=datetime.timezone.utc)
     if not sess.agenda: agents.build_agenda(sess, panel)
     pick = [x for x in panel if only is None or x.id == only] or panel[:1]; keys = list(settings.LIVE_GEMINI_KEYS)
     if not keys: raise RuntimeError("No live key is set.")
@@ -87,7 +90,7 @@ def mint(sess, only=None):
     for iv in pick:
         k = panel.index(iv)
         cfg = {"response_modalities": ["AUDIO"], "system_instruction": instruction(sess, iv, panel),
-               "speech_config": {"voice_config": {"prebuilt_voice_config": {"voice_name": voices[iv.id]}}},
+               "speech_config": dict({"voice_config": {"prebuilt_voice_config": {"voice_name": voices[iv.id]}}}, **({"language_code": langs.code(lang)} if getattr(settings, "LIVE_PIN_LANGUAGE", False) else {})),
                "input_audio_transcription": {}, "output_audio_transcription": {},   # transcripts are for the interview record; the model itself hears the audio
                "session_resumption": {}, "context_window_compression": {"sliding_window": {}}, "tools": _tools(panel, iv)}
         order = keys[k % len(keys):] + keys[:k % len(keys)]   # each panelist starts on their own key; if it fails the next key is tried
@@ -108,4 +111,4 @@ def mint(sess, only=None):
     members = [{"id": iv.id, "name": iv.name, "position": iv.position, "image": f"/static/{iv.image}", "voice": voices[iv.id], "token": t} for (iv, _, _), t in zip(jobs, tokens)]
     multi = len(panel) > 1
     return {"token": members[0]["token"], "model": settings.LIVE_MODEL, "lead": {k: members[0][k] for k in ("id", "name", "position", "image")}, "voice": members[0]["voice"], "members": members,
-            "limit_s": int(ws.duration) * 60, "opening": "Begin the interview now." + (" You are the chair: greet the candidate, introduce your colleagues in one sentence, and ask your first question." if multi else "")}
+            "limit_s": int(ws.duration) * 60, "lang": lang, "latin": lang not in NON_LATIN, "opening": "Begin the interview now." + (" You are the chair: greet the candidate, introduce your colleagues in one sentence, and ask your first question." if multi else "")}

@@ -35,6 +35,7 @@ FACTCHECK_GEMINI_MODELS = [m.strip() for m in os.environ.get("FACTCHECK_GEMINI_M
 # Live voice interview (Gemini Live, audio in/audio out). Create the key at https://aistudio.google.com/apikey in a project WITHOUT billing so it stays on the free tier.
 LIVE_GEMINI_KEYS = _env_keys("LIVE_GEMINI_KEYS", "LIVE_GEMINI_KEY")
 LIVE_MODEL = os.environ.get("LIVE_MODEL", "gemini-3.8-live")
+LIVE_PIN_LANGUAGE = os.environ.get("LIVE_PIN_LANGUAGE", "") == "1"   # set to 1 if the live model accepts an explicit speech language (native-audio models choose it themselves and reject it)
 FACTCHECK_SECONDS = float(os.environ.get("FACTCHECK_SECONDS", "2"))   # most the panel waits for the check before it asks its next question (a slower check is saved when it arrives and used on the turn after)
 def _models(name, default): return [m.strip() for m in os.environ.get(name, default).split(",") if m.strip()]
 # Groq limits tokens PER MODEL (and per organisation, so extra keys from the same account share them). Listing models from different

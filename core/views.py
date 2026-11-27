@@ -11,7 +11,7 @@ from django.conf import settings
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from .models import *
-from .services import agents, ai, logic, docs, tts, stt, storage, kinds, panelplan, langs, wizard, factcheck, planner, live
+from .services import agents, ai, logic, docs, tts, stt, storage, kinds, panelplan, langs, wizard, factcheck, planner, live, team
 from . import jobs
 
 AVATARS = ["img/i06.png","img/i07.png","img/i08.png","img/i09.png","img/i10.png","img/i11.png","img/i12.png","img/i13.png","img/i19.png"]
@@ -24,8 +24,12 @@ def ajax(fn):
         except ai.AIError as e: return JsonResponse({"error": str(e)}, status=400)
     w.__name__ = fn.__name__; return w
 
-def mine(model, request, pk):
-    return get_object_or_404(model, pk=pk, user=request.user) if model is Workspace else get_object_or_404(model, pk=pk, workspace__user=request.user)
+def mine(model, request, pk, shared=False):
+    """Your own record. A team member also reaches the team's workspace and what belongs to it; an interview session stays with the person who sat it (shared=True lets the team read its report)."""
+    u = request.user
+    if model is Workspace: return get_object_or_404(Workspace.objects.filter(team.ws_q(u)).distinct(), pk=pk)
+    if model is Session and not shared: return get_object_or_404(Session.objects.filter(team.sess_q(u)).distinct(), pk=pk)
+    return get_object_or_404(model.objects.filter(team.ws_q(u, "workspace__")).distinct(), pk=pk)
 
 FAQS = [("Is ReadyWise a mock interview website?","No. It is a preparation department: it researches your opportunity, builds a panel, trains you, runs the interview and adjusts your plan."),
 ("Does it predict whether I will get the job, place or visa?","No. Visa, admission and scholarship simulations are practice only. ReadyWise shows a transparent readiness picture and never a hiring probability."),
@@ -79,24 +83,24 @@ def dashboard(request):
     logic.ensure_seed(); p = agents.profile_of(request.user); today = date.today()
     mem = {m.category: round(m.score) for m in MemoryItem.objects.filter(user=request.user)}
     rows = []
-    for w in Workspace.objects.filter(user=request.user).order_by("-created"):
-        t = w.tasks.count(); d = w.tasks.filter(done=True).count(); sess = w.sessions.filter(status="done").count()
+    for w in Workspace.objects.filter(team.ws_q(request.user)).distinct().order_by("-created"):
+        mt = w.tasks.filter(team.task_q(request.user)); t = mt.count(); d = mt.filter(done=True).count(); sess = w.sessions.filter(status="done").count()
         steps = [bool(w.researched_at), t > 0, sess > 0]
         nxt = ["Run research", "Generate your plan", "Sit your first interview"][steps.index(False)] if False in steps else "Keep practising"
         rows.append({"w": w, "pct": round(100 * d / t) if t else 0, "tasks": t, "done": d, "sessions": sess, "steps": steps, "next": nxt,
-                     "left": (w.date - today).days if w.date and not w.general else None, "panel": list(w.panel.all()), "diff": w.get_difficulty_display(), "kind_icon": kinds.profile(w.kind)["icon"]})
+                     "left": (w.date - today).days if w.date and not w.general else None, "panel": list(w.panel.all()), "diff": w.get_difficulty_display(), "kind_icon": kinds.profile(w.kind)["icon"], "team": (len(team.accepted(w)) if len(team.accepted(w)) > 1 else 0), "coord": w.user_id == request.user.id})
     hour = timezone.localtime().hour; hello = "Good morning" if hour < 12 else "Good afternoon" if hour < 18 else "Good evening"
     scored = [v for v in mem.values()]; progress = planner.progress(request.user)
-    due = PrepTask.objects.filter(workspace__user=request.user, done=False, due__lte=today).select_related("workspace")
+    due = PrepTask.objects.filter(team.task_q(request.user), done=False, due__lte=today).select_related("workspace")
     return render(request, "core/dashboard.html", {"rows": rows, "profile": p, "hello": hello, "display_name": (p.full_name.split()[0] if p.full_name else request.user.username), "cards": KIND_CARDS,
-        "progress": progress, "stats": {"active": len(rows), "due": due.count(), "sessions": Session.objects.filter(workspace__user=request.user, status="done").count(), "avg": round(sum(scored) / len(scored)) if scored else None},
-        "sessions": Session.objects.filter(workspace__user=request.user, status="done").select_related("workspace").order_by("-started_at")[:4]})
+        "progress": progress, "stats": {"active": len(rows), "due": due.count(), "sessions": Session.objects.filter(team.sess_q(request.user), status="done").count(), "avg": round(sum(scored) / len(scored)) if scored else None},
+        "sessions": Session.objects.filter(team.sess_q(request.user), status="done").select_related("workspace").order_by("-started_at")[:4], "invites": [{"m": m, "who": team.name_of(m.workspace.user)} for m in team.pending_for(request.user)]})
 
 @login_required
 def analysis(request):
     mem = {m.category: round(m.score) for m in MemoryItem.objects.filter(user=request.user)}
     return render(request, "core/analysis.html", {"progress": planner.progress(request.user), "mem_json": json.dumps([mem.get(c, 0) for c, _ in CATS]), "labels": json.dumps([l for _, l in CATS]),
-        "sessions": Session.objects.filter(workspace__user=request.user, status="done").select_related("workspace").order_by("-started_at")[:9]})
+        "sessions": Session.objects.filter(team.sess_q(request.user), status="done").select_related("workspace").order_by("-started_at")[:9]})
 
 def _save_profile(request, p):
     """Save profile answers from either the full profile page or the guided welcome flow. Only fields that were sent are changed."""
@@ -228,16 +232,22 @@ def workspace_new(request):
         if keep or have: ws.docs_plan = keep; ws.documents = dict(ws.documents or {}, **have); ws.save(update_fields=["docs_plan", "documents"])
         if dk == "cv" and mydoc and not prof.cv_text: prof.cv_text = mydoc; prof.save()   # first CV ever given: keep it on the profile so the next interview starts with it
         logic.ensure_seed(); panelplan.allocate(ws)  # the system assigns the panel and difficulty
+        if kind in kinds.TEAM_KINDS:   # the last question: who is presenting with you? You become the coordinator
+            emails = team.parse_emails(P.get(pre + "team_emails", ""), request.user.email)
+            if emails:
+                team.ensure_coordinator(ws); sent, skipped = team.invite(ws, request.user, emails)
+                if sent: messages.success(request, f"Invitation sent to {', '.join(sent)}. They will see it in their notifications. You are the coordinator.")
+                for e, why in skipped: messages.info(request, f"{e}: {why}.")
         return redirect("ws", pk=ws.pk)
     return render(request, "core/ws_new.html", {"cfg": interview_config(request.GET.get("kind", ""), agents.profile_of(request.user)), "doc_files": sorted({"doc_" + d["key"] for d in kinds.DOCS.values()})})
 
-KIND_EMOJI = {"startup": "🚀", "employment": "💼", "internship": "🎒", "graduate": "🎓", "admission": "🏫", "scholarship": "🏅", "visa": "✈️", "fellowship": "🔬", "pitch": "📈", "certification": "✅"}
+KIND_EMOJI = {"startup": "🚀", "employment": "💼", "internship": "🎒", "graduate": "🎓", "admission": "🏫", "scholarship": "🏅", "visa": "✈️", "fellowship": "🔬", "pitch": "📈", "hackathon": "🏆", "certification": "✅"}
 NAME_EG = {"startup": ("Flutterwave", "Backend engineer"), "employment": ("Microsoft", "Product manager"), "internship": ("Google", "Software engineering intern"), "graduate": ("Unilever", "Future Leaders Programme"),
            "admission": ("University of Edinburgh", "MSc Data Science"), "scholarship": ("Chevening", "Master's degree"), "visa": ("United Kingdom", "Student visa"), "fellowship": ("Fulbright at Harvard", "Public health research"),
-           "pitch": ("Omega", "Y Combinator seed round"), "certification": ("AWS", "Solutions Architect Associate")}
-APP, WHY, DOCSEC = "Your application", "Why you chose it", "Your documents"   # the three main parts of the new-interview flow
+           "pitch": ("Omega", "Y Combinator seed round"), "hackathon": ("Omega", "ETHGlobal, payments track"), "certification": ("AWS", "Solutions Architect Associate")}
+APP, WHY, DOCSEC, TEAM = "Your application", "Why you chose it", "Your documents", "Your team"   # the three main parts of the new-interview flow
 CHAPTER_SAY = {APP: "Let's start with your application.", WHY: "Now the reasons behind it. This is what makes the practice personal.", kinds.YOU: "A little more about you, so the questions fit your real background.",
-               kinds.INT: "Almost done with the questions. A few about the interview itself.", DOCSEC: "Last part: your documents. First I'll check which ones this interview expects."}
+               kinds.INT: "Almost done with the questions. A few about the interview itself.", DOCSEC: "Last part: your documents. First I'll check which ones this interview expects.", TEAM: "One last thing: are you doing this with other people?"}
 
 def interview_config(preselect="", profile=None):
     """The guided new-interview flow. Every interview type has its own questions, one at a time; only the essential ones cannot be skipped."""
@@ -263,6 +273,9 @@ def interview_config(preselect="", profile=None):
         d = kinds.doc(k); have = bool(d["profile_cv"] and profile and (profile.cv_text or "").strip()); doc_steps = [dict(id="docscan", type="research", chapter=DOCSEC, say=CHAPTER_SAY[DOCSEC], q="Checking which documents this interview expects", help="A quick look at what a real panel asks applicants to bring, so I only ask for what matters.", company=k + "__company", position=k + "__position", noSkip=True)]
         doc_steps.append(dict(id=d["key"], name=f"{k}__{d['key']}", type="doc", file="doc_" + d["key"], accept=".pdf,.docx,.txt", label=d["short"], q=d["q"], req=True, ph=d["ph"], dropLabel=d["drop"], eg="", chapter=DOCSEC,
                               help=("I loaded the CV from your profile. Check it, replace it by pasting a different one, or upload a file." if have else d["help"]), reqMsg="I need this one so I can ask about your real background. Paste it or upload a file."))
+        if k in kinds.TEAM_KINDS:   # asked at the very end: you become the coordinator, and they share everything
+            doc_steps.append(dict(id="team", name=f"{k}__team_emails", type="textarea", label="Teammates", chapter=TEAM, say=CHAPTER_SAY[TEAM], q="Do you have other members you will present with?",
+                                  help="Add up to four teammates by email, one per line. You become the coordinator, they get an invitation in ReadyWise, and you share the same research, plan and schedule. Leave it empty if you are presenting alone.", eg="name@gmail.com", max=400))
         if d["key"] == "cv": doc_steps[-1].update(pasteOnly=True, minLen=80, ph="Copy your CV and paste it here. Typing is switched off.")   # a CV is pasted or uploaded, never typed
         kc[k] = {"label": pf["label"], "blurb": pf["blurb"], "emoji": KIND_EMOJI[k], "icon": pf["icon"], "duration": pf["duration"], "palette": pf["anim"]["c"], "plan": [x["label"] for x in pf["plan"]], "steps": steps, "docSteps": doc_steps, "docKey": d["key"],
                  "hello": f"A {pf['label'].lower()}. I know exactly how to research that."}
@@ -347,6 +360,7 @@ def toggle_task(request, pk):
     """Tick a task off (or undo it). Only a task that belongs to today can be completed: tasks for later days stay locked until their day."""
     planner.reschedule_missed(request.user)
     t = mine(PrepTask, request, pk); day = planner.today()
+    if (t.assignee_id or t.workspace.user_id) != request.user.id: return JsonResponse({"error": "This task belongs to someone else on your team."}, status=403)
     if not t.done and not planner.can_complete(t, day): return JsonResponse({"error": f"This task opens on {t.due:%A %d %B}. You can complete it that day."}, status=400)
     if t.done and t.due != day: return JsonResponse({"error": "Only today's tasks can be changed."}, status=400)
     t.done = not t.done; t.completed_at = timezone.now() if t.done else None; t.save(update_fields=["done", "completed_at"])
@@ -361,14 +375,14 @@ def search(request):
     """Header search: your interviews, prep tasks, finished sessions and interviewers matching the text. With no text it lists your latest interviews."""
     from django.db.models import Q
     q = (request.GET.get("q") or "").strip()[:80]; u = request.user; groups = []
-    wq = Workspace.objects.filter(user=u)
+    wq = Workspace.objects.filter(team.ws_q(u)).distinct()
     if q: wq = wq.filter(Q(title__icontains=q) | Q(company__icontains=q) | Q(position__icontains=q))
     ws = list(wq.order_by("-created")[:5])
     if ws: groups.append({"label": "Interviews", "items": [{"title": w.title, "sub": " ".join(x for x in (w.company, w.position) if x) or w.get_kind_display(), "url": f"/w/{w.pk}/", "icon": "folder"} for w in ws]})
     if q:
-        ts = PrepTask.objects.filter(workspace__user=u).filter(Q(title__icontains=q) | Q(detail__icontains=q)).select_related("workspace").order_by("done", "due")[:5]
+        ts = PrepTask.objects.filter(team.task_q(u)).filter(Q(title__icontains=q) | Q(detail__icontains=q)).select_related("workspace").order_by("done", "due")[:5]
         if ts: groups.append({"label": "Prep tasks", "items": [{"title": t.title, "sub": f"{t.workspace.title}, {'done' if t.done else 'due ' + t.due.strftime('%b %d')}", "url": f"/w/{t.workspace_id}/", "icon": "circle-check" if t.done else "circle"} for t in ts]})
-        ss = Session.objects.filter(workspace__user=u, status="done").filter(Q(workspace__title__icontains=q) | Q(workspace__company__icontains=q)).select_related("workspace").order_by("-started_at")[:4]
+        ss = Session.objects.filter(team.sess_q(u), status="done").filter(Q(workspace__title__icontains=q) | Q(workspace__company__icontains=q)).select_related("workspace").order_by("-started_at")[:4]
         if ss: groups.append({"label": "Reports", "items": [{"title": x.workspace.title, "sub": "Interview report, " + x.started_at.strftime("%b %d"), "url": f"/report/{x.pk}/", "icon": "file-text"} for x in ss]})
         iv = Interviewer.objects.filter(Q(owner=None) | Q(owner=u)).filter(Q(name__icontains=q) | Q(position__icontains=q))[:4]
         if iv: groups.append({"label": "Interviewers", "items": [{"title": i.name, "sub": i.position, "url": "/interviewers/", "icon": "user-round"} for i in iv]})
@@ -378,15 +392,16 @@ def search(request):
 def tasks_page(request):
     """Every prep task in one place: due now (including missed ones moved forward), coming up by day, and recently completed. Ticking works the same as everywhere else."""
     planner.reschedule_missed(request.user); day = planner.today()
-    wsq = Workspace.objects.filter(user=request.user).order_by("-created"); wid = request.GET.get("w"); sel_ws = wsq.filter(pk=wid).first() if (wid or "").isdigit() else None
-    tq = PrepTask.objects.filter(workspace__user=request.user).select_related("workspace")
+    wsq = Workspace.objects.filter(team.ws_q(request.user)).distinct().order_by("-created"); wid = request.GET.get("w"); sel_ws = wsq.filter(pk=wid).first() if (wid or "").isdigit() else None
+    whole = request.GET.get("team") == "1" and any(team.is_team(w) for w in wsq)   # the whole team's tasks, not only mine
+    tq = (PrepTask.objects.filter(workspace__in=wsq) if whole else PrepTask.objects.filter(team.task_q(request.user))).select_related("workspace", "assignee")
     if sel_ws: tq = tq.filter(workspace=sel_ws)
     todo = [planner.card(t, day=day) for t in tq.filter(done=False, due__lte=day).order_by("-priority", "due", "id")]
     later = [planner.card(t, day=day) for t in tq.filter(done=False, due__gt=day).order_by("due", "-priority", "id")]
     done = [planner.card(t, day=day) for t in tq.filter(done=True).order_by("-due", "-id")[:20]]
     total = tq.count(); finished = tq.filter(done=True).count()
     return render(request, "core/tasks.html", {"workspaces": wsq, "sel_ws": sel_ws, "data": {"today": todo, "later": later, "done": done},
-        "counts": {"today": len(todo), "later": len(later), "done": finished, "pct": round(100 * finished / total) if total else None}})
+        "whole": whole, "has_team": any(team.is_team(w) for w in wsq), "counts": {"today": len(todo), "later": len(later), "done": finished, "pct": round(100 * finished / total) if total else None}})
 
 @login_required
 def calendar_page(request):
@@ -395,9 +410,9 @@ def calendar_page(request):
     planner.reschedule_missed(request.user); day = planner.today()
     try: y, m = (int(x) for x in request.GET.get("m", "").split("-")); first = date(y, m, 1)
     except (ValueError, TypeError): first = day.replace(day=1)
-    wsq = Workspace.objects.filter(user=request.user).order_by("-created"); wid = request.GET.get("w"); sel_ws = wsq.filter(pk=wid).first() if (wid or "").isdigit() else None
+    wsq = Workspace.objects.filter(team.ws_q(request.user)).distinct().order_by("-created"); wid = request.GET.get("w"); sel_ws = wsq.filter(pk=wid).first() if (wid or "").isdigit() else None
     weeks = cal.Calendar(firstweekday=0).monthdatescalendar(first.year, first.month)
-    tq = PrepTask.objects.filter(workspace__user=request.user, due__gte=weeks[0][0], due__lte=weeks[-1][-1]).select_related("workspace")
+    tq = PrepTask.objects.filter(team.task_q(request.user), due__gte=weeks[0][0], due__lte=weeks[-1][-1]).select_related("workspace")
     if sel_ws: tq = tq.filter(workspace=sel_ws)
     by = {}
     for t in tq: by.setdefault(t.due, []).append(planner.card(t, day=day))
@@ -417,7 +432,7 @@ def calendar_page(request):
 def new_session(request, pk):
     ws = mine(Workspace, request, pk)
     if not ws.panel.exists(): panelplan.allocate(ws)
-    s = Session.objects.create(workspace=ws, mode=panelplan.choose_mode(ws)[0]); return redirect("room", pk=s.pk)
+    s = Session.objects.create(workspace=ws, user=request.user, mode=panelplan.choose_mode(ws)[0]); return redirect("room", pk=s.pk)
 
 def _iv(i): return {"id": i.id, "name": i.name, "position": i.position, "image": f"/static/{i.image}", "gender": i.gender, "pitch": i.pitch, "rate": i.rate}
 
@@ -565,7 +580,7 @@ def interviewer_clone(request, pk):
 
 @login_required
 def report(request, pk):
-    s = mine(Session, request, pk); ev = getattr(s, "evaluation", None)
+    s = mine(Session, request, pk, shared=True); ev = getattr(s, "evaluation", None)
     imps = [i if isinstance(i, dict) else {"title": str(i), "what_happened": "", "fix": "", "example": ""} for i in (ev.improvements if ev else [])][:3]
     hint = {"Outstanding": "You came across as a clear yes.", "Strong": "You would probably get through this round.", "Borderline": "It could go either way. A few fixes would tip it.", "Weak": "You would probably not get through yet. The fixes below matter.", "Not ready": "Not ready for this interview yet. Start with the first fix below."}.get(ev.verdict, "") if ev else ""
     return render(request, "core/report.html", {"imps": imps, "hint": hint, "skills": [{"label": l, "score": ev.scores.get(c)} for c, l in CATS if ev and isinstance(ev.scores.get(c), (int, float))], "s": s, "ws": s.workspace, "ev": ev, "turns": s.turns.select_related("speaker"),
@@ -655,3 +670,103 @@ def room_live_challenge(request, pk):
     if not ch or not ch.get("brief"): return JsonResponse({"challenge": None, "final": False})
     s.challenge = ch; s.save(update_fields=["challenge"])
     return JsonResponse({"challenge": ch, "final": True})
+
+
+# ---------- teams: an investor pitch or hackathon presentation prepared by up to five people ----------
+def _team_ws(request, pk, coordinator=False):
+    from django.http import Http404
+    ws = mine(Workspace, request, pk)
+    if ws.kind not in kinds.TEAM_KINDS: raise Http404
+    if coordinator and ws.user_id != request.user.id: raise Http404   # only the coordinator can do this
+    if ws.user_id == request.user.id: team.ensure_coordinator(ws)
+    return ws
+
+def _back(ws): return redirect("team", pk=ws.pk)
+
+@login_required
+def team_page(request, pk):
+    ws = _team_ws(request, pk); rows = []
+    for m in team.roster(ws):
+        mt = ws.tasks.filter(assignee=m.user) if m.user_id else ws.tasks.none()
+        rows.append({"m": m, "name": team.name_of(m.user) if m.user_id else m.email, "tasks": mt.count(), "done": mt.filter(done=True).count(), "me": m.user_id == request.user.id})
+    me = next((r for r in rows if r["me"]), None); coord = ws.user_id == request.user.id; slots = team.slots(ws, request.user)
+    return render(request, "core/team.html", {"ws": ws, "kind_label": kinds.profile(ws.kind)["label"], "rows": rows, "me": me, "coord": coord, "slots": slots, "chosen": next((s for s in slots if s["chosen"]), None), "joined": len(team.accepted(ws)),
+        "active": team.active_count(ws), "waiting": team.active_count(ws) - len(team.accepted(ws)), "spots": team.spots_left(ws), "max": team.MAX_TEAM, "has_tasks": ws.tasks.exists(), "unassigned": ws.tasks.filter(assignee__isnull=True, done=False, team_copy=False).count(), "coordinator_name": team.name_of(ws.user)})
+
+@login_required
+@require_POST
+def team_invite(request, pk):
+    ws = _team_ws(request, pk, True); emails = team.parse_emails(request.POST.get("emails", ""), request.user.email)
+    if not emails: messages.error(request, "Type at least one email address.")
+    else:
+        sent, skipped = team.invite(ws, request.user, emails)
+        if sent: messages.success(request, f"Invitation sent to {', '.join(sent)}. They will see it in their notifications.")
+        for e, why in skipped: messages.info(request, f"{e}: {why}.")
+    return _back(ws)
+
+@login_required
+@require_POST
+def team_remove(request, pk, mid):
+    ws = _team_ws(request, pk, True); m = get_object_or_404(WorkspaceMember, pk=mid, workspace=ws, role="member")
+    if m.user_id: ws.tasks.filter(assignee=m.user, team_copy=True).delete(); ws.tasks.filter(assignee=m.user).update(assignee=None)
+    m.delete()
+    if ws.tasks.exists(): team.split_tasks(ws)
+    messages.success(request, "Removed from the team."); return _back(ws)
+
+@login_required
+@require_POST
+def team_part(request, pk):
+    ws = _team_ws(request, pk); m = WorkspaceMember.objects.filter(workspace=ws, user=request.user, status="accepted").first()
+    if m: m.part = request.POST.get("part", "").strip()[:600]; m.save(update_fields=["part"]); messages.success(request, "Saved your part.")
+    return _back(ws)
+
+@login_required
+@require_POST
+def team_respond(request, mid, action):
+    """The invited person accepts or declines. Matched by their account or the email the coordinator typed."""
+    from django.http import Http404
+    m = get_object_or_404(WorkspaceMember, pk=mid, status="invited")
+    if not (m.user_id == request.user.id or (request.user.email and m.email.lower() == request.user.email.lower())): raise Http404
+    if action not in ("accept", "decline"): raise Http404
+    team.respond(m, request.user, action == "accept")
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest": return JsonResponse({"ok": True, "status": m.status, "workspace": m.workspace_id})
+    if m.status == "accepted": messages.success(request, f"You joined {m.workspace.title}. Add your part, and suggest times you are free."); return redirect("team", pk=m.workspace_id)
+    messages.info(request, "Invitation declined."); return redirect("dashboard")
+
+@login_required
+@require_POST
+def team_slot_add(request, pk):
+    ws = _team_ws(request, pk)
+    if not team.accepted(ws) or not any(m.user_id == request.user.id for m in team.accepted(ws)): return _back(ws)
+    try: when = timezone.make_aware(__import__("datetime").datetime.strptime(request.POST.get("when", ""), "%Y-%m-%dT%H:%M"))
+    except (ValueError, TypeError): messages.error(request, "Pick a date and time."); return _back(ws)
+    if when < timezone.now(): messages.error(request, "That time has already passed."); return _back(ws)
+    if ws.slots.count() >= 8: messages.error(request, "That is plenty of options. Remove one first."); return _back(ws)
+    TeamSlot.objects.create(workspace=ws, start=when, proposed_by=request.user, free=[request.user.pk]); return _back(ws)
+
+@login_required
+@require_POST
+def team_slot_vote(request, pk, sid):
+    ws = _team_ws(request, pk); s = get_object_or_404(TeamSlot, pk=sid, workspace=ws)
+    if any(m.user_id == request.user.id for m in team.accepted(ws)):
+        free = set(s.free or []); free.symmetric_difference_update({request.user.pk}); s.free = sorted(free); s.save(update_fields=["free"])
+    return _back(ws)
+
+@login_required
+@require_POST
+def team_slot_confirm(request, pk, sid):
+    ws = _team_ws(request, pk, True); s = get_object_or_404(TeamSlot, pk=sid, workspace=ws); team.confirm_slot(ws, s)
+    messages.success(request, "Time confirmed. Everyone on the team can see it in their notifications and calendar."); return _back(ws)
+
+@login_required
+@require_POST
+def team_slot_delete(request, pk, sid):
+    ws = _team_ws(request, pk, True); TeamSlot.objects.filter(pk=sid, workspace=ws).delete(); return _back(ws)
+
+@login_required
+@require_POST
+def team_split(request, pk):
+    ws = _team_ws(request, pk, True)
+    if not ws.tasks.exists(): messages.info(request, "Generate your prep plan first. It is split between you automatically."); return _back(ws)
+    n = team.split_tasks(ws)
+    messages.success(request, f"Shared {n} tasks between {len(team.accepted(ws))} people." if n else "You need at least one teammate who has joined."); return _back(ws)
