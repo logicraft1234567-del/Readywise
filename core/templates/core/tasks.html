@@ -1,0 +1,16 @@
+{% extends 'core/app_base.html' %}{% block title %}Tasks: ReadyWise{% endblock %}
+{% block content %}
+<div class="pg-head" style="margin-top:.4rem"><div><h1>Tasks</h1><p>Everything you need to do to get ready, in one list. Missed tasks move forward by themselves.</p></div>
+<form method="get"><select class="field" name="w" aria-label="Show interview" onchange="this.form.submit()" style="padding:.55rem 2rem .55rem .8rem;width:auto;max-width:100%"><option value="">All interviews</option>{% for w in workspaces %}<option value="{{ w.pk }}" {% if sel_ws and sel_ws.pk == w.pk %}selected{% endif %}>{{ w.title|truncatechars:34 }}</option>{% endfor %}</select></form></div>
+<div class="strip"><div><small>Due now</small><b>{{ counts.today }}</b></div><div><small>Coming up</small><b>{{ counts.later }}</b></div><div><small>Completed</small><b>{{ counts.done }}</b></div><div><small>Plan completed</small><b>{% if counts.pct is not None %}{{ counts.pct }}%{% else %}-{% endif %}</b></div></div>
+<div class="sec-title"><h2>Due now</h2><span>Do these first</span></div><div id="tk-today" class="tk-sec"></div>
+<div class="sec-title"><h2>Coming up</h2><span>Opens on its day</span></div><div id="tk-later" class="tk-sec"></div>
+<details class="glass rp-d" id="tk-donebox"><summary>Completed<span>{{ counts.done }}</span></summary><div id="tk-done" class="tk-sec"></div></details>
+{{ data|json_script:"tk-data" }}
+<script>document.addEventListener("DOMContentLoaded",()=>{
+  const D=JSON.parse(document.getElementById("tk-data").textContent),E=RW.esc;
+  function group(list){let out="",cur="";list.forEach(t=>{if(t.due!==cur){cur=t.due;out+=`${out?"</div>":""}<div class="tk-day" id="d-${E(t.due)}"><h4 class="plan-day">${E(t.when)}</h4>`}out+=RW.taskHTML(t,{showWs:true})});return out?out+"</div>":""}
+  [["tk-today","today","Nothing is due. Pick what to practise next."],["tk-later","later","Nothing else is planned yet."],["tk-done","done","Nothing completed yet."]].forEach(([id,k,empty])=>{
+    document.getElementById(id).innerHTML=D[k].length?group(D[k]):`<div class="plan-empty">${empty}</div>`});
+  const h=location.hash.slice(1);if(h){const el=document.getElementById(h);if(el)el.scrollIntoView({block:"center"})}
+});</script>{% endblock %}

@@ -44,8 +44,9 @@ def test_pages_render(client, setup):
     c = client.get("/calendar/"); assert c.status_code == 200 and b'id="day-panel"' in c.content and b"Interview" in c.content
     assert client.get(f"/calendar/?m=2030-02&w={ws.pk}&d=2030-02-05").status_code == 200
     w = client.get(f"/w/{ws.pk}/").content.decode(); assert 'id="plan-list"' in w and 'id="plan-data"' in w
-    d = client.get("/dashboard/").content.decode(); assert 'id="pg-score"' in d or 'No scores yet' in d; assert 'id="focus-list"' in d and 'id="bell"' in d and "Calendar" in d and "Analytics" in d
-    a = client.get("/analytics/"); assert a.status_code == 200 and b'id="pg-activity"' in a.content and b'id="radar"' in a.content
+    d = client.get("/dashboard/").content.decode(); assert 'id="bell"' in d and "Calendar" in d and "/analysis/" in d and "/tasks/" in d and 'id="focus-list"' not in d
+    a = client.get("/analysis/").content.decode(); assert 'id="pg-activity"' in a and 'id="radar"' in a
+    k = client.get("/tasks/").content.decode(); assert 'id="tk-today"' in k and 'id="tk-data"' in k
 
 def test_progress_numbers(client, setup):
     u, ws = setup

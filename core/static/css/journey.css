@@ -61,5 +61,3 @@
 /* the daily-tasks popup (planner.css, fixed bottom-right) used to sit on top of the sticky bar's big button: on this page it rides above the bar */
 body:has(#ws-foot) .pop{bottom:6.4rem}
 @media (max-width:760px){body:has(#ws-foot) .pop{bottom:10.5rem}}
-
-@media(max-width:1000px){.ws-foot{bottom:calc(var(--tab-h,64px) + env(safe-area-inset-bottom,0px))}}

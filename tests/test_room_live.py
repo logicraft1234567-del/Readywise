@@ -46,7 +46,8 @@ def test_software_role_gets_a_hands_on_coding_task_and_its_review_sees_the_code(
     from tests.test_flow import LAST
     from core.services import agents
     c = client_in; ws, s = _session(c); ws.kind = "employment"; ws.position = "Senior Backend Developer"; ws.research = {}; ws.save()
-    assert agents.build_format(ws) == "code"   # no research yet: software title defaults to a coding task
+    assert agents.build_format(ws) is None   # no verified research and no answer from the candidate: no hands-on task, whatever the job title says
+    ws.details = {"build_pref": "yes"}; ws.save(); assert agents.build_format(ws) == "code"   # the candidate asked for one
     ch = {"title": "Sum", "brief": "Sum a list.", "format": "code", "language": "javascript", "starter": "function solve(a){}", "tests": [{"args": [[1, 2]], "expected": 3}], "minutes": 10, "spoken": "Here is a task."}
     monkeypatch.setattr(agents, "make_challenge", lambda sess: ch)
     got = None
@@ -61,8 +62,9 @@ def test_the_research_decides_whether_there_is_a_hands_on_task(client_in):
     from core.services import agents
     c = client_in; ws, s = _session(c); ws.kind = "employment"; ws.position = "Account Executive"; ws.research = {}
     assert agents.build_format(ws) is None
-    ws.research = {"assessment": {"build": "written", "why": "candidates report a mock sales pitch"}}; assert agents.build_format(ws) == "document"
-    ws.position = "Software Engineer"; ws.research = {"assessment": {"build": "none"}}; assert agents.build_format(ws) is None   # the research wins over the job title
-    ws.research = {"assessment": {"build": "coding"}}; assert agents.build_format(ws) == "code"
+    ws.research = {"assessment": {"build": "written", "why": "candidates report a mock sales pitch", "status": "candidate_reported"}}; assert agents.build_format(ws) == "document"
+    ws.position = "Software Engineer"; ws.research = {"assessment": {"build": "none", "status": "confirmed"}}; assert agents.build_format(ws) is None   # the research wins over the job title
+    ws.research = {"assessment": {"build": "coding", "status": "confirmed"}}; assert agents.build_format(ws) == "code"
+    ws.research = {"assessment": {"build": "coding", "status": "inferred"}}; assert agents.build_format(ws) is None and not agents.build_verified(ws)   # a guess is not verified: the candidate is asked instead
     ws.kind = "admission"; assert agents.build_format(ws) is None
     assert "build" not in [f["key"] for f in __import__("core.services.kinds", fromlist=["x"]).profile("employment")["fields"]]   # candidates are no longer asked

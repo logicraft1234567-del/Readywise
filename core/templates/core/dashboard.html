@@ -1,52 +1,38 @@
 {% extends 'core/app_base.html' %}{% load static %}{% block title %}Dashboard: ReadyWise{% endblock %}
-{% block actions %}<a class="btn sm" href="{% url 'analytics' %}"><i data-lucide="chart-column" width="14"></i>Analytics</a>{% endblock %}
+{% block actions %}<a class="btn sm" href="{% url 'analysis' %}"><i data-lucide="chart-column" width="14"></i>Analysis</a>{% endblock %}
 {% block content %}
 {% if not profile.full_name %}<a class="nudge" href="{% url 'welcome' %}"><i data-lucide="sparkles" width="18" style="color:var(--b1);flex:none"></i><span><b>Finish setting up your profile</b><small>One question at a time, about a minute. Skip anything.</small></span><span class="go">Start</span></a>{% endif %}
+<div class="pg-head" style="margin-top:.4rem"><div><h1>{{ hello }}, {{ display_name }}.</h1><p>{% if stats.due %}You have {{ stats.due }} task{{ stats.due|pluralize }} to do today.{% else %}Nothing is overdue. Pick what to practise next.{% endif %} ReadyWise chooses your interviewers and difficulty for every interview.</p></div>
+<div class="flex flex-wrap gap-2">{% if rows %}<a class="btn" href="{% url 'ws' rows.0.w.pk %}">Continue: {{ rows.0.w.title|truncatechars:22 }}</a>{% endif %}<a class="btn solid" href="{% url 'ws_new' %}"><i data-lucide="plus" width="16"></i>New interview</a></div></div>
 {% if not profile.cv_text %}<div class="nudge" style="cursor:default"><i data-lucide="file-up" width="18" style="color:var(--b1)"></i><span class="text-sm">Add your CV so interviewers can ask about your real experience.</span><a class="btn sm ml-auto" href="{% url 'profile' %}">Add CV</a></div>{% endif %}
+<div class="strip"><div><small>Tasks due today</small><b>{{ stats.due }}</b></div><div><small>Active interviews</small><b>{{ stats.active }}</b></div><div><small>Day streak</small><b>{{ progress.streak }}</b></div><div><small>Average skill score</small><b>{% if stats.avg is None %}–{% else %}{{ stats.avg }}{% endif %}</b></div></div>
 
-<div class="pg-head"><div><h1>{{ hello }}, {{ display_name }}.</h1><p>{% if stats.due %}You have {{ stats.due }} task{{ stats.due|pluralize }} to do today.{% else %}Nothing is overdue. Pick what to practise next.{% endif %}</p></div>
-<a class="btn solid" href="{% url 'ws_new' %}"><i data-lucide="plus" width="16"></i>New interview</a></div>
+<div class="dash-cols mt-2">
+<div class="min-w-0"><div class="sec-title" style="margin-top:0"><h2>Your interviews</h2></div>
+{% for r in rows %}<div class="glass card mb-3{% if forloop.first %} feat{% endif %}" data-s="{{ r.w.title|lower }} {{ r.w.company|lower }} {{ r.w.get_kind_display|lower }}"><div class="flex flex-wrap justify-between gap-3"><div class="min-w-0"><div class="flex flex-wrap gap-1"><span class="chip"><i data-lucide="{{ r.kind_icon }}" width="12"></i>{{ r.w.get_kind_display }}</span><span class="chip">{{ r.diff }}</span>{% if r.left is not None %}<span class="chip">{{ r.left }} day{{ r.left|pluralize }} left</span>{% endif %}</div><h3 class="text-lg mt-2"><a href="{% url 'ws' r.w.pk %}" style="text-decoration:none;color:inherit">{{ r.w.title }}</a></h3><p class="text-sm" style="color:var(--mut)">{{ r.w.company }} {{ r.w.position }}</p></div>
+<div class="text-right"><div class="dots justify-end" title="Research, Plan, Interview">{% for ok in r.steps %}<i class="{% if ok %}on{% endif %}"></i>{% endfor %}</div><small style="color:var(--mut)">Research, Plan, Interview</small><div class="flex justify-end mt-2">{% for i in r.panel %}<img src="{% static i.image %}" title="{{ i.name }}, {{ i.position }}" class="w-8 h-8 rounded-full object-cover -ml-2 first:ml-0" style="border:2px solid var(--surface)" alt="{{ i.name }}">{% endfor %}</div></div></div>
+<div class="mt-4"><div class="flex justify-between text-xs mb-1" style="color:var(--mut)"><span>Plan progress</span><b style="color:var(--ink)">{{ r.done }}/{{ r.tasks }}</b></div><div class="bar"><i data-w="{{ r.pct }}"></i></div></div>
+<div class="flex flex-wrap items-center justify-between gap-2 mt-4"><span class="text-sm"><b>Next:</b> {{ r.next }}</span><a class="btn sm solid" href="{% url 'ws' r.w.pk %}">Continue<i data-lucide="arrow-right" width="14"></i></a></div></div>
+{% empty %}<div class="glass p-8 text-center"><img class="w-10 mx-auto mb-3" src="{% static 'img/mark.svg' %}" alt=""><b>No interviews yet.</b><p class="text-sm" style="color:var(--mut)">Pick a type below to create your first workspace.</p></div>{% endfor %}</div>
 
-<div class="dx-top">
-  {% if focus %}
-  <section class="glass dx-next" data-s="{{ focus.w.title|lower }} {{ focus.w.company|lower }} {{ focus.w.get_kind_display|lower }}" aria-label="Your next interview">
-    <div class="dx-count">
-      {% if focus.left is not None %}<b>{% if focus.left == 0 %}Today{% else %}{{ focus.left }}{% endif %}</b><span>{% if focus.left == 0 %}is your interview day{% else %}day{{ focus.left|pluralize }} to your interview{% endif %}</span>
-      {% else %}<b>{{ focus.pct }}<small>%</small></b><span>of your plan done</span>{% endif %}
-    </div>
-    <div class="dx-body">
-      <div class="flex flex-wrap gap-1"><span class="chip"><i data-lucide="{{ focus.kind_icon }}" width="12"></i>{{ focus.w.get_kind_display }}</span><span class="chip">{{ focus.diff }}</span></div>
-      <h2><a href="{% url 'ws' focus.w.pk %}">{{ focus.w.title }}</a></h2>
-      {% if focus.w.company or focus.w.position %}<p class="dx-sub">{{ focus.w.company }} {{ focus.w.position }}</p>{% endif %}
-      <div class="dx-plan"><div class="flex justify-between text-xs mb-1"><span>Plan progress</span><b>{{ focus.done }} of {{ focus.tasks }} tasks</b></div><div class="bar"><i data-w="{{ focus.pct }}"></i></div></div>
-      <div class="dx-foot"><span class="text-sm"><b>Next:</b> {{ focus.next }}</span>
-        <div class="flex items-center gap-3"><div class="dx-faces">{% for i in focus.panel %}<img src="{% static i.image %}" title="{{ i.name }}, {{ i.position }}" alt="{{ i.name }}">{% endfor %}</div><a class="btn solid" href="{% url 'ws' focus.w.pk %}">Continue<i data-lucide="arrow-right" width="15"></i></a></div></div>
-    </div>
-  </section>
-  {% else %}
-  <section class="glass dx-next dx-empty"><div><img src="{% static 'img/mark.svg' %}" width="36" alt=""><h2>Start your first interview</h2><p>Tell ReadyWise what you are preparing for. It builds your plan and picks the interviewers.</p><a class="btn solid" href="{% url 'ws_new' %}"><i data-lucide="plus" width="16"></i>New interview</a></div></section>
-  {% endif %}
-  <section class="dx-today" aria-labelledby="focus"><div class="sec-title"><h2 id="focus">Today's focus</h2><a href="{% url 'calendar' %}" class="text-sm">Calendar</a></div><div id="focus-list" class="grid gap-2"><p class="text-sm" style="color:var(--mut)">Loading today's tasks…</p></div></section>
+<div class="min-w-0"><div class="sec-title" style="margin-top:0"><h2>Tasks</h2></div>
+<a class="glass card tasks-card" href="{% url 'tasks' %}"><div class="ico"><i data-lucide="list-checks" width="19"></i></div><div class="min-w-0"><b>{% if stats.due %}{{ stats.due }} task{{ stats.due|pluralize }} due today{% else %}Nothing due today{% endif %}</b><p class="text-sm" style="color:var(--mut)">Open your tasks</p></div><i data-lucide="arrow-right" width="16" style="margin-left:auto;color:var(--mut)"></i></a>
+<div class="sec-title"><h2>Score over time</h2><a class="an-link" href="{% url 'analysis' %}">Full analysis<i data-lucide="arrow-right" width="13"></i></a></div>
+<section class="glass pg-card"><header><div><p>{{ progress.trend.text }}</p></div><span class="dl {{ progress.trend.state }}">{% if progress.trend.state == 'up' %}Improving{% elif progress.trend.state == 'down' %}Declining{% elif progress.trend.state == 'flat' %}Holding steady{% else %}Not enough data{% endif %}</span></header>
+{% if progress.series %}<div class="chart-box"><canvas id="pg-score" role="img" aria-label="Interview score over time"></canvas></div>{% else %}<div class="pg-empty"><div><b>No scores yet</b>Finish a practice interview and your trend starts here.</div></div>{% endif %}</section>
+<div class="sec-title"><h2>Recent sessions</h2></div>{% for s in sessions %}<a class="glass card mb-2 flex justify-between text-sm" style="text-decoration:none;color:inherit;padding:.8rem 1rem" href="{% url 'report' s.pk %}"><span>{{ s.workspace.title|truncatechars:24 }}</span><small style="color:var(--mut)">{{ s.started_at|date:"M d" }}</small></a>{% empty %}<p class="text-sm" style="color:var(--mut)">None yet.</p>{% endfor %}</div>
 </div>
 
-<div class="strip dx-strip">
-  <div><small>Latest score</small><b>{% if progress.trend.last is None %}–{% else %}{{ progress.trend.last }}{% endif %}</b>{% if progress.trend.state == 'up' or progress.trend.state == 'down' or progress.trend.state == 'flat' %}<em class="dl {{ progress.trend.state }}">{{ progress.trend.delta|stringformat:"+d" }} since first</em>{% endif %}</div>
-  <div><small>Day streak</small><b>{{ progress.streak }}</b></div>
-  <div><small>Tasks due today</small><b>{{ stats.due }}</b></div>
-  <div><small>Practice sessions</small><b>{{ stats.sessions }}</b></div>
-</div>
+<div class="sec-title"><h2>What are you preparing for?</h2><span>Pick one to start a new workspace</span></div>
+<div class="type-chips">{% for k,l,ic,d in cards %}<a class="chip-link" href="{% url 'ws_new' %}?kind={{ k }}" title="{{ d }}"><i data-lucide="{{ ic }}" width="15"></i>{{ l }}</a>{% endfor %}</div>
 
-<div class="dx-bottom{% if not others %} solo{% endif %}">
-  <section class="glass pg-card"><header><div><h3>Interview score over time</h3><p>{{ progress.trend.text }}</p></div><a class="btn sm" href="{% url 'analytics' %}">Full analysis<i data-lucide="arrow-right" width="14"></i></a></header>
-    {% if progress.series %}<div class="chart-box tall"><canvas id="pg-score" role="img" aria-label="Interview score over time"></canvas></div>{% else %}<div class="pg-empty"><div><b>No scores yet</b>Finish a practice interview and your trend starts here.</div></div>{% endif %}</section>
-  {% if others %}<section class="dx-list" aria-label="Other interviews"><div class="sec-title" style="margin-top:0"><h2>Other interviews</h2><span>{{ others|length }}</span></div>
-    {% for r in others %}<a class="glass dx-row" href="{% url 'ws' r.w.pk %}" data-s="{{ r.w.title|lower }} {{ r.w.company|lower }} {{ r.w.get_kind_display|lower }}"><div class="min-w-0"><b class="truncate d-block">{{ r.w.title }}</b><small>{% if r.left is not None %}{{ r.left }} day{{ r.left|pluralize }} left{% else %}{{ r.w.get_kind_display }}{% endif %}</small></div><div class="dx-mini"><span>{{ r.pct }}%</span><div class="bar"><i data-w="{{ r.pct }}"></i></div></div></a>{% endfor %}</section>{% endif %}
-</div>
-{{ graph|json_script:"pg-data" }}
+{{ progress.series|json_script:"pg-series" }}
 <script>document.addEventListener("DOMContentLoaded",()=>{
-  const P=JSON.parse(document.getElementById("pg-data").textContent),css=getComputedStyle(document.documentElement),v=n=>css.getPropertyValue(n).trim(),ok=v("--ok"),bad=v("--bad"),b1=v("--b1"),mut=v("--line2"),grid=v("--line"),sc=document.getElementById("pg-score");
-  if(sc&&P.series.length)new Chart(sc,{type:"line",data:{labels:P.series.map(s=>s.label),datasets:[
-    {label:"Score",data:P.series.map(s=>s.score),borderWidth:2.5,tension:.25,pointRadius:5,pointHoverRadius:7,pointBackgroundColor:b1,pointBorderColor:v("--surface"),pointBorderWidth:2,borderColor:b1,segment:{borderColor:c=>c.p1.parsed.y<c.p0.parsed.y?bad:ok}},
-    {label:"Strong (70)",data:P.series.map(()=>70),borderDash:[5,5],borderWidth:1.2,pointRadius:0,borderColor:mut}]},
-   options:{responsive:true,maintainAspectRatio:false,animation:{duration:600},plugins:{legend:{display:true,position:"bottom",labels:{boxWidth:10,boxHeight:2}},tooltip:{callbacks:{title:i=>P.series[i[0].dataIndex].title+" ("+i[0].label+")"}}},scales:{y:{min:0,max:100,ticks:{stepSize:25},grid:{color:grid}},x:{grid:{display:false}}}}});
+  const sc=document.getElementById("pg-score"); if(!sc) return;
+  const S=JSON.parse(document.getElementById("pg-series").textContent),css=getComputedStyle(document.documentElement),v=n=>css.getPropertyValue(n).trim(),
+    ok=v("--ok"),bad=v("--bad"),b1=v("--b1"),mut=v("--line2"),grid=v("--line");
+  new Chart(sc,{type:"line",data:{labels:S.map(s=>s.label),datasets:[
+    {label:"Score",data:S.map(s=>s.score),borderWidth:2.5,tension:.25,pointRadius:4,pointHoverRadius:6,pointBackgroundColor:b1,pointBorderColor:v("--surface"),pointBorderWidth:2,borderColor:b1,segment:{borderColor:c=>c.p1.parsed.y<c.p0.parsed.y?bad:ok}},
+    {label:"Strong (70)",data:S.map(()=>70),borderDash:[5,5],borderWidth:1.2,pointRadius:0,borderColor:mut}]},
+   options:{responsive:true,maintainAspectRatio:false,animation:{duration:600},plugins:{legend:{display:true,position:"bottom",labels:{boxWidth:10,boxHeight:2,usePointStyle:false}},tooltip:{callbacks:{title:i=>S[i[0].dataIndex].title+" ("+i[0].label+")"}}},scales:{y:{min:0,max:100,ticks:{stepSize:25},grid:{color:grid}},x:{grid:{display:false}}}}});
 });</script>{% endblock %}

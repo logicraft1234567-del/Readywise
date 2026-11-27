@@ -157,5 +157,14 @@
 .dash-cols>*{min-width:0}
 @media (min-width:1024px){.dash-cols{grid-template-columns:minmax(0,1fr) minmax(330px,420px)}}
 
-/* the bottom tab bar sits under these on phones */
-@media(max-width:1000px){.pop{bottom:calc(var(--tab-h,64px) + env(safe-area-inset-bottom,0px) + .75rem);right:.75rem;left:.75rem;width:auto}body:has(#ws-foot) .pop{bottom:calc(var(--tab-h,64px) + env(safe-area-inset-bottom,0px) + 9rem)}}
+/* dashboard: the first interview is the one to continue, so it carries the accent */
+.glass.feat{border-left:3px solid var(--b1)}
+.an-link{display:inline-flex;align-items:center;gap:.3rem;font-size:.84rem;font-weight:600;color:var(--b1);text-decoration:none}.an-link:hover{text-decoration:underline}
+.type-chips{display:flex;flex-wrap:wrap;gap:.5rem}
+.chip-link{display:inline-flex;align-items:center;gap:.45rem;padding:.5rem .85rem;border-radius:var(--r2);background:var(--surface);border:1px solid var(--line);color:var(--ink2);font-weight:500;font-size:.88rem;text-decoration:none;transition:border-color .2s,box-shadow .2s,color .2s}
+.chip-link svg{color:var(--b1);flex:none}.chip-link:hover{border-color:var(--b1);color:var(--ink);box-shadow:0 0 0 3px var(--soft)}
+
+/* tasks page */
+.tk-sec{display:grid;gap:.6rem;grid-template-columns:minmax(0,1fr)}
+.tk-day{display:grid;gap:.5rem;margin-bottom:.9rem}
+.tasks-card{display:flex;align-items:center;gap:.9rem;text-decoration:none;color:inherit}.tasks-card .ico{margin:0}

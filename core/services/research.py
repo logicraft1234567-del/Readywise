@@ -189,8 +189,8 @@ Give 6 to 10 topics and up to 8 key_numbers (the hard figures a candidate should
 def _synth_prompt2(ws, ctx, lang, notes, sc=1.0, short=False):
     """Part 2: what to expect and how to prepare, plus the system's own decision about a hands-on task."""
     k = kinds.profile(ws.kind); job = ws.kind in kinds.JOB_KINDS
-    task = ('"assessment": {"build": "none|coding|written", "track": "software|data|product|design|marketing|sales|finance|operations|other", "why": "one sentence naming the evidence", "status": "confirmed|candidate_reported|inferred"}. '
-            'Decide it from the notes: "coding" when this is a software or data role (practical coding is part of almost every such interview) or the notes show a live or take-home coding exercise; "written" only when the notes show a work sample, case study or presentation for this kind of role; otherwise "none".') if job else '"assessment": {"build": "none", "track": "other", "why": "", "status": "inferred"}'
+    task = ('"assessment": {"build": "none|coding|written|unclear", "track": "software|data|product|design|marketing|sales|finance|operations|other", "why": "one sentence naming the evidence", "status": "confirmed|candidate_reported|inferred"}. '
+            'Decide it from the notes, never from the job title alone. "coding" only when the notes show a live or take-home coding exercise used for this company or this kind of role; "written" only when the notes show a work sample, case study or presentation for it; "none" when the notes show there is no practical task; "unclear" when the notes do not settle it (the candidate will then be asked). Set status to "confirmed" or "candidate_reported" only when a note supports the decision, otherwise "inferred".') if job else '"assessment": {"build": "none", "track": "other", "why": "", "status": "inferred"}'
     return f"""Using the research notes below, list what this candidate should expect and how to prepare for a {k['label'].lower()} interview. Return JSON only.
 {ctx}
 RESEARCH NOTES BY ANGLE:
@@ -250,7 +250,7 @@ def _clean(d, ws):
     kn = [{"label": str(n.get("label", ""))[:60], "value": str(n.get("value", ""))[:60], "year": str(n.get("year", ""))[:12], "status": _status(n.get("status"), str(n.get("source", ""))), "source": str(n.get("source", ""))[:100]}
           for n in d.get("key_numbers", []) if isinstance(n, dict) and n.get("label") and n.get("value")][:8]
     a = d.get("assessment") if isinstance(d.get("assessment"), dict) else {}
-    assessment = {"build": a.get("build") if a.get("build") in ("none", "coding", "written") else "none", "track": str(a.get("track", "other"))[:20], "why": str(a.get("why", ""))[:240], "status": _status(a.get("status"))}
+    assessment = {"build": a.get("build") if a.get("build") in ("none", "coding", "written", "unclear") else ("unclear" if job else "none"), "track": str(a.get("track", "other"))[:20], "why": str(a.get("why", ""))[:240], "status": _status(a.get("status"))}
     pn = d.get("panel") if isinstance(d.get("panel"), dict) else {}
     try: pc = int(pn.get("count"))
     except (TypeError, ValueError): pc = 0

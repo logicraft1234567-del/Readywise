@@ -131,30 +131,45 @@ def memory_for(user, iv):
 
 _TECH = re.compile(r"software|developer|programmer|back-?end|front-?end|full[- ]?stack|devops|\bsre\b|site reliability|data (scientist|engineer|analyst)|machine learning|\bml\b|\bai engineer|mobile (engineer|developer)|\bios\b|android|web developer|\bsdet\b|qa automation|platform engineer|cloud engineer", re.I)
 
-def build_format(ws):
-    """None, "code" or "document": does this interview include a hands-on task, and of what kind? The research decides, not the candidate:
-    it records whether this company and role use practical or technical assessments. Before research exists, software and data job titles default to a coding task."""
-    if ws.kind not in kinds.JOB_KINDS: return None
+def _assess(ws):
     a = (ws.research or {}).get("assessment") if isinstance(ws.research, dict) else None
-    if isinstance(a, dict) and a.get("build") in ("none", "coding", "written"): return {"coding": "code", "written": "document", "none": None}[a["build"]]
-    return "code" if _TECH.search(f"{ws.position} {ws.title}") else None
+    return a if isinstance(a, dict) else {}
+
+def build_verified(ws):
+    """True when the research itself settled whether this interview has a hands-on task, with evidence (confirmed or candidate-reported). A guess from the job title does not count."""
+    a = _assess(ws); return a.get("build") in ("none", "coding", "written") and a.get("status") in ("confirmed", "candidate_reported")
+
+def build_format(ws):
+    """None, "code" or "document": does this interview include a hands-on task, and of what kind?
+    Only when the research verified it. When the research could not tell, the candidate is asked before the interview (details.build_pref), and with no answer there is no task."""
+    if ws.kind not in kinds.JOB_KINDS: return None
+    if build_verified(ws): return {"coding": "code", "written": "document", "none": None}[_assess(ws)["build"]]
+    if (ws.details or {}).get("build_pref") == "yes": return "code" if _TECH.search(f"{ws.position} {ws.title}") else "document"
+    return None
 
 def make_challenge(sess):
-    """The panel sets one realistic task for this role. For code the checks run in the candidate's own browser (JavaScript); other languages are reviewed by the panel."""
-    ws = sess.workspace; fmt = build_format(ws); lvl = (ws.details or {}).get("level") or ws.difficulty; why = ((ws.research or {}).get("assessment") or {}).get("why", "") if isinstance(ws.research, dict) else ""
+    """The panel sets one very short, realistic task for this role. For code the checks run in the candidate's own browser (JavaScript); other languages are reviewed by the panel."""
+    ws = sess.workspace; fmt = build_format(ws); lvl = (ws.details or {}).get("level") or ws.difficulty; why = _assess(ws).get("why", "")
     if fmt == "code":
-        spec = ('A small, realistic programming task solvable in 10 to 15 minutes at this level. Return "format":"code". Write it so it can be solved in JavaScript as a function named solve (the candidate may pick another language, then only their code is reviewed). '
-                '"starter" is the JavaScript starter code with the empty function. "tests" is 4 to 6 checks: {"args":[...JSON values passed to solve...],"expected":<JSON value>}, including edge cases; they must be correct.')
+        spec = ('A tiny programming task a candidate can finish in about 4 minutes: ONE short function, no setup, no libraries, only numbers, strings and arrays. Return "format":"code". Write it so it can be solved in JavaScript as a function named solve (the candidate may pick another language, then only their code is reviewed). '
+                '"starter" is the JavaScript starter code: the empty function with a one-line comment. "tests" is 3 or 4 checks: {"args":[...JSON values passed to solve...],"expected":<JSON value>}, including one edge case; they must be correct.')
     else:
-        spec = ('A short realistic work-sample task for this role (for example a launch plan, a campaign brief, a prioritised roadmap, a customer reply, a financial analysis outline), doable in 10 to 15 minutes of writing. Return "format":"document", "starter":"" and "tests":[].')
+        spec = ('A very short work-sample task for this role (for example a two-line customer reply, a three-point launch plan, a one-paragraph prioritisation), answerable in about 4 minutes of writing. Return "format":"document", "starter":"" and "tests":[].')
     prompt = f"""Design ONE hands-on task for a live interview. {spec}
 {ctx(ws)}
 Level: {lvl}. What the research found about how this employer assesses people: {why or "nothing specific"}. Match that style where you can. Return JSON only: {{"title": str, "brief": str, "format": "code|document", "language": "javascript|text", "starter": str, "tests": [], "minutes": int, "spoken": str}}
-"brief" is what the candidate reads: the problem, input and output, one example, constraints (max 120 words). "spoken" is what the interviewer says out loud to hand over the task (max 50 words, natural, mention that they can think aloud and that there is an editor on screen). "minutes" 8 to 15."""
-    text, _ = ai.call(prompt, json_mode=True, temperature=0.6, purpose="interview"); d = ai.parse_json(text)
-    tests = [t for t in (d.get("tests") or []) if isinstance(t, dict) and isinstance(t.get("args"), list) and "expected" in t][:8] if fmt == "code" else []
-    return {"title": str(d.get("title", "Build task"))[:100], "brief": str(d.get("brief", ""))[:1200], "format": fmt, "language": "javascript" if fmt == "code" else "text", "starter": str(d.get("starter", ""))[:2000] if fmt == "code" else "",
-            "tests": tests, "minutes": max(5, min(20, int(d.get("minutes") or 12))), "spoken": str(d.get("spoken", "Let's try something hands-on. I've put a task on your screen. Think aloud as you work."))[:400]}
+"title": 2 to 5 words naming the task, like "Count repeated words" or "Reply to a late order".
+"brief" is what the candidate reads. Plain, friendly English, at most 60 words, no story, no jargon, no filler, and do not hint at the method. Use exactly these three lines:
+Task: one sentence saying what to do, using a real situation from this role.
+Example: one concrete input and the expected result (for a written task, what a good answer would cover).
+Watch out for: one edge case or rule.
+"spoken" is what the interviewer says out loud to hand it over: at most 30 words, natural, say it is a quick one, name the minutes, say it is on their screen and that they can think aloud. "minutes" is 3 to 6."""
+    text, _ = ai.call(prompt, json_mode=True, temperature=0.5, purpose="interview"); d = ai.parse_json(text)
+    tests = [t for t in (d.get("tests") or []) if isinstance(t, dict) and isinstance(t.get("args"), list) and "expected" in t][:5] if fmt == "code" else []
+    try: mins = int(d.get("minutes") or 5)
+    except (TypeError, ValueError): mins = 5
+    return {"title": str(d.get("title", "Quick task"))[:60], "brief": str(d.get("brief", "")).strip()[:600], "format": fmt, "language": "javascript" if fmt == "code" else "text", "starter": str(d.get("starter", ""))[:1200] if fmt == "code" else "",
+            "tests": tests, "minutes": max(3, min(6, mins)), "spoken": str(d.get("spoken", "Here is a quick one, about five minutes. It is on your screen. Think aloud as you work."))[:240]}
 
 BUILD_TAG = "[candidate submitted their solution to the hands-on task] "
 
@@ -213,6 +228,13 @@ RATINGS = ("demonstrated", "partial", "not_demonstrated", "insufficient_evidence
 
 def _slug(x): return re.sub(r"[^a-z0-9]+", "_", str(x).lower()).strip("_")[:28]
 def _s(x, n): return " ".join(str(x or "").split())[:n]
+def _imps(raw):
+    """Improvement points as small objects (title, what happened, fix, example). Plain strings from older evaluations or a looser reply are kept as a title only. At most 3."""
+    out = []
+    for i in (raw if isinstance(raw, list) else []):
+        if isinstance(i, dict) and _s(i.get("title"), 90): out.append({"title": _s(i.get("title"), 90), "what_happened": _s(i.get("what_happened"), 260), "fix": _s(i.get("fix"), 260), "example": _s(i.get("example"), 320)})
+        elif isinstance(i, str) and _s(i, 200): out.append({"title": _s(i, 200), "what_happened": "", "fix": "", "example": ""})
+    return out[:3]
 
 def role_lens(ws):
     """What a professional interviewer for THIS kind of role weighs, chosen from the role itself so no two kinds of role are assessed the same way."""
@@ -371,15 +393,11 @@ def close_window(ws):
 
 _FAREWELL = {"English": "That brings us to the end of our time. Thank you for speaking with us today. We will review everything and be in touch about the next steps. Goodbye, and take care."}
 
-_WANTS_END = re.compile(r"\b(i(?:'m| am) (?:done|finished)|(?:we|i)(?:'re| are)? (?:done|finished)|that(?:'s| is) (?:all|it) from me|let(?:'s| us) (?:stop|end|finish)|(?:can|could) we (?:stop|end|finish)|i (?:want|would like|need) to (?:stop|end|leave|go)|end (?:the|this) (?:interview|meeting|call)|i(?:'ll| will) (?:stop|leave) here)\b", re.I)
-_CONDUCT_END = "I am ending this interview here because the conversation has not stayed professional. Thank you for your time. Goodbye."
-
-def close_text(text, lang="English", reason="finished"):
+def close_text(text, lang="English"):
     """The closing words never ask anything: a question would be left hanging because the meeting ends right after. Question sentences are removed;
     if nothing is left, a plain closing is used."""
     parts = re.split(r"(?<=[.!?])\s+", " ".join(str(text or "").split()))
     kept = " ".join(x for x in parts if x and not x.rstrip().endswith("?")).strip()
-    if reason == "unprofessional": return kept if len(kept.split()) >= 8 else _CONDUCT_END
     return kept if len(kept.split()) >= 6 else _FAREWELL.get(lang, _FAREWELL["English"])
 
 def next_turn(sess, elapsed):
@@ -414,7 +432,6 @@ Return JSON only: {{"text": str}}"""
             return t, False, False
     if not sess.agenda: build_agenda(sess, panel)
     agenda = list(sess.agenda); cur = _cur(agenda)
-    agenda_done = cur is None
     if cur is None and not closing:   # every planned area is done and time is left: one more round, on the weakest evidence so far
         agenda.append({"owner": panel[len(asked) % len(panel)].id, "area": "Challenge the weakest or least supported claim so far", "goal": "Press on what the panel noted as unanswered or contradicted.", "tries": 0, "done": False}); cur = agenda[-1]
     convo = "\n".join(f"{(t.speaker.name if t.speaker else 'CANDIDATE')}: {t.text}" for t in turns[-10:]) or "(interview has not started)"
@@ -430,10 +447,10 @@ Return JSON only: {{"text": str}}"""
     if cur: cur["tries"] = sum(1 for t in asked if t.topic == cur["area"][:120])   # questions already spent on this area
     must_advance = bool(cur) and (cur.get("tries", 0) >= MAX_TRIES or nonans)
     nxt = next((a for a in agenda if a is not cur and not a.get("done")), None)
-    if closing: phase = "CLOSING: the time is up. Close the meeting the way a real interview ends, in 2 to 4 short sentences: a brief remark on the conversation, thank the candidate (speak for the whole panel if there is more than one of you), say what happens next in this process, and say goodbye. Do NOT ask any question of any kind, not even 'do you have any questions': the meeting ends as soon as you finish speaking. Set end_reason=\"finished\"."
+    if closing: phase = "CLOSING: the time is up. Close the meeting the way a real interview ends, in 2 to 4 short sentences: a brief remark on the conversation, thank the candidate (speak for the whole panel if there is more than one of you), say what happens next in this process, and say goodbye. Do NOT ask any question of any kind, not even 'do you have any questions': the meeting ends as soon as you finish speaking. Set end=true."
     elif unclear: phase = "UNCLEAR ANSWER. The last transcript is too thin to be an answer."
     elif must_advance: phase = "MOVE ON: the current area has had its attempts or the candidate said they do not know or do not have it. Treat that as a finding. Take the NEXT agenda item with its owner."
-    else: phase = "MIDDLE: follow the agenda. The interview is NOT over: there is still time. Do not say goodbye or wrap up unless you are ending the interview under the END RULES. Otherwise ask your question and wait for the answer."
+    else: phase = "MIDDLE: follow the agenda. The interview is NOT over: there is still time. Never say goodbye, never thank them for their time and never wrap up. Ask your question and wait for the answer. Set end=false."
     if submitted: heard_rule = ("THE CANDIDATE SUBMITTED THEIR SOLUTION to the hands-on task (" + str(sess.challenge.get("title", "")) + ") . Their work, exactly as submitted, including the result of the automatic checks if any:\n" + last_txt[:3500]
                                 + "\nReview it like a real interviewer: react to something concrete in it and ask ONE question about a trade-off, an edge case or how they would improve it. Copy the few words you are reacting to into the \"heard\" field. Never claim the code does something it does not.")
     elif not last_c: heard_rule = "There is no candidate answer yet."
@@ -461,10 +478,9 @@ PHASE: {phase}
 {extra}
 HOW TO CHOOSE THE SPEAKER AND THE MOVE: follow the plan. "followup" means you stay on the NOW item: the speaker is its owner. "advance" means the NOW item is finished (answered well enough, or exhausted): the speaker is the owner of the next item and the question opens that area{f" (next item: {nxt['area']})" if nxt else ""}. If the last answer was weak or vague on the NOW item and attempts are left, use "followup". A panel member who does not own the item may step in ONLY when a verified fact, or a contradiction with what that member heard or with the documents, must be put to the candidate at once ("interject": true); that member must be named in speaker_id and may not repeat anything already asked. Never let the same member speak more than twice in a row on a panel of two or more unless it is a follow-up on their own area.
 {PROCEDURE}
-END RULES: you may end the interview yourself, in exactly two cases. (1) end_reason="finished": the candidate has clearly said they are done or want to stop, or every planned area is covered and the time is nearly used. Your text is then a short professional closing (a remark, thanks, what happens next, goodbye). (2) end_reason="unprofessional": the candidate is abusive, insulting, harassing, sexual, threatening or discriminatory, or keeps refusing to take the interview seriously (jokes, trolling, deliberate nonsense). The FIRST time, do not end it: say calmly in one or two sentences that this is a professional interview and you need it to stay that way, set warn=true and carry on with your question. End it only if it continues after a warning (conduct warnings given so far: {(sess.assessment or {}).get("conduct_warnings", 0)}), or at once with severe=true for threats, slurs, sexual harassment or hate. When ending, your text is a calm, firm, polite statement that you are ending the interview because the conversation has not stayed professional, then thanks and goodbye. Never end for nerves, silence, "I don't know", weak or wrong answers, or criticism of the process: those are not unprofessional. In both cases the text contains NO question. Otherwise end_reason is "".
 The candidate's words come from automatic speech recognition: ignore misspellings and misheard names (including yours); never correct the candidate's spelling.
 {CONDUCT}
-Return JSON only: {{"speaker_id": int, "move": "followup|advance", "interject": bool, "text": str, "heard": str, "basis": "details|research|job_description|answer|verified_fact", "topic": str, "followup": bool, "end_reason": "" | "finished" | "unprofessional", "warn": bool, "severe": bool,
+Return JSON only: {{"speaker_id": int, "move": "followup|advance", "interject": bool, "text": str, "heard": str, "basis": "details|research|job_description|answer|verified_fact", "topic": str, "followup": bool, "end": bool,
 "notes": {{"claims": [up to 3 short factual claims the candidate just made that still need verifying, empty if none], "gaps": [up to 2 things unanswered, missing or vague, empty if none]}},
 "assessment": null when there is no usable candidate answer yet, otherwise {{"said": "what they actually said, at most 25 words", "demonstrates": "the claim, decision, experience or competency it shows", "evidence": ["at most 2 concrete things in the answer that support that"], "unknown": ["at most 2 important things still unknown"], "sufficient": true|false, "competency": "a key from the ASSESSMENT RECORD", "status": "partial|established|concern", "contradiction": "only if the answer conflicts with an earlier answer, the CV or a document: say exactly how, otherwise empty"}}}}
 The "text" is the only thing the candidate hears. It must not contain any of your assessment."""
@@ -484,21 +500,12 @@ The "text" is the only thing the candidate hears. It must not contain any of you
     if note:   # one corrective regeneration, only when the question and the assessment disagree or the question repeats; a failure keeps the first reply
         try: d2 = ask_turn(prompt + "\n" + note, effort); d, upd = d2, (None if (unclear or not last_c) else clean_update(d2.get("assessment"), keys))
         except ai.AIError: pass
-    # --- the model may ask to end the interview; the code decides whether that is allowed ---
-    warns = int((sess.assessment or {}).get("conduct_warnings", 0)); reason = str(d.get("end_reason") or "").strip().lower(); reason = reason if reason in ("finished", "unprofessional") else ""
-    wants_end = bool(last_c) and not submitted and not unclear and len(last_txt.split()) < 30 and bool(_WANTS_END.search(last_txt))
-    if reason == "unprofessional" and not (last_c and not unclear and (warns >= 1 or d.get("severe") is True)): reason = ""; d["warn"] = True   # a first offence is a warning, never an ending
-    if reason == "finished" and not (last_c and (wants_end or (agenda_done and elapsed >= 0.8 * ws.duration * 60))): reason = ""   # "finished" only when the candidate says so, or the plan and the time are used up
-    if closing and not reason: reason = "finished"
-    if d.get("warn") and not reason and last_c and not unclear:
-        a = dict(sess.assessment or {}); a["conduct_warnings"] = warns + 1; sess.assessment = a; sess.save(update_fields=["assessment"])
-    ending = bool(reason) and bool(turns)
     # --- enforce the plan in code: the model proposes, the plan decides who speaks ---
     move = d.get("move") if d.get("move") in ("followup", "advance") else ("advance" if must_advance else "followup")
     if must_advance and not closing: move = "advance"
     interject = bool(d.get("interject")) and bool(pairs) and len(panel) > 1
     owner_cur = ids.get(cur["owner"]) if cur else None
-    if ending: sp = panel[0]   # the lead closes the meeting for everyone
+    if closing: sp = panel[0]   # the lead closes the meeting for everyone
     elif unclear: sp = ids.get(d.get("speaker_id")) or (ids.get(asked[-1].speaker_id) if asked and asked[-1].speaker_id in ids else None) or panel[0]
     elif interject: sp = ids.get(d.get("speaker_id")) or owner_cur or panel[0]
     elif move == "advance" and nxt: sp = ids.get(nxt["owner"]) or panel[0]
@@ -515,15 +522,12 @@ The "text" is the only thing the candidate hears. It must not contain any of you
     if cur is not None and cur.get("done"):
         a = dict(sess.assessment or {}); a["objectives_done"] = (a.get("objectives_done", []) + [cur["area"]])[-20:]; sess.assessment = a; sess.save(update_fields=["assessment"])
     d["text"] = polish(re.sub(r"^\s*" + re.escape(sp.name) + r"\s*[,:\-]\s*", "", str(d.get("text", "")), flags=re.I))  # a speaker never opens by saying their own name
-    end = ending   # only the clock, or an end the rules above allowed, closes the meeting; the closing words never contain a question
-    if end:
-        d["text"] = close_text(d["text"], lang, reason)
-        a = dict(sess.assessment or {}); a["ended_by"] = reason; sess.assessment = a; sess.save(update_fields=["assessment"])
+    end = closing and bool(turns)   # only the clock ends the interview: the model's own "end" is ignored, so a question is never the last thing said
+    if end: d["text"] = close_text(d["text"], lang)
     area = (cur or {}).get("area", "") if (move == "followup" or interject or not nxt) else nxt["area"]
     t = Turn.objects.create(session=sess, speaker=sp, role="interviewer", text=d.get("text", "")[:900], topic=str(area or d.get("topic", ""))[:120], followup=(move == "followup" and not unclear), offset=int(elapsed))
     if t.topic and t.topic not in sess.covered: sess.covered = (sess.covered + [t.topic])[-20:]; sess.save(update_fields=["covered"])
     quoted = " ".join(str(d.get("heard") or "").lower().split()).strip(" .,\"'")
-    t.end_reason = reason if end else ""
     t.grounded = None if (not last_c or unclear or not quoted) else (quoted in " ".join(last_txt.lower().split()))  # did the interviewer quote words the candidate really said?
     return t, end, False
 
@@ -563,10 +567,6 @@ def final_score(model_overall, cat_scores, weights, answered, asked_n, wrong, im
     base -= min(20, 5 * wrong + 3 * implausible)
     return int(max(0, min(100, round(base))))
 
-def ended_note(sess):
-    if (sess.assessment or {}).get("ended_by") == "unprofessional": return "HOW IT ENDED: the panel ENDED THE INTERVIEW EARLY because of the candidate's unprofessional conduct. A real panel counts that heavily against the candidate (communication, behavioural, professionalism). Areas never reached stay insufficient_evidence; do not invent evidence for them.\n"
-    return ""
-
 def evaluate(sess):
     turns = list(sess.turns.order_by("id")); ws = sess.workspace
     tr = "\n".join(f"[turn {t.id} @ {t.offset//60:02d}:{t.offset%60:02d}] {(t.speaker.name if t.speaker else 'CANDIDATE')}: {t.text}" for t in turns)
@@ -575,16 +575,18 @@ def evaluate(sess):
     prompt = f"""Evaluate this REAL interview the way the hiring panel would after the candidate has left, and give a score. Be strict, honest and specific, as an examiner is, not as a coach trying to encourage. Only score a category if the transcript gives evidence; otherwise null.
 {ctx(ws)}
 TRANSCRIPT:\n{tr[:14000]}
-{ended_note(sess)}FACTS THE CANDIDATE STATED THAT AN ONLINE CHECK FOUND WRONG OR IMPLAUSIBLE: \n{fc}
+FACTS THE CANDIDATE STATED THAT AN ONLINE CHECK FOUND WRONG OR IMPLAUSIBLE: \n{fc}
 THE PANEL'S ROLE-SPECIFIC RUBRIC AND ITS NOTES DURING THE INTERVIEW (a starting point, not a verdict: re-judge every competency from the transcript itself):
 {assessment_text(sess)}
 ROLE LENS: {role_lens(ws)}
 IMPORTANT: the CANDIDATE lines come from automatic speech recognition. Never criticise spelling, typos, odd words, missing punctuation, mispronounced or misheard names; judge only the content and delivery that the words show. Do not penalise the candidate for anything an interviewer did. A word that clearly makes no sense in context is probably a mis-transcription: do not quote it and do not build a point on it. Be direct about professional conduct: unsupported or implausible claims, claims the online check found wrong, unethical or exploitative positions, profanity or disrespect, unanswered or evaded questions, answers with no specifics, and numbers that do not add up must each be named plainly as an improvement point with a quote. Judge the answers against the role, the candidate's own documents and the research, not against how polite the interviewers were. A candidate who says they have no evidence for a claim has not supported it.
 COMPETENCY ASSESSMENT: rate EVERY competency of the rubric above. rating is one of "demonstrated" (clear, specific, credible evidence in the candidate's own words), "partial" (some evidence, with gaps), "not_demonstrated" (the transcript shows they cannot do or do not understand it: you MUST cite that evidence), "insufficient_evidence" (the interview did not give enough to judge: this is NOT a negative finding). Never use not_demonstrated just because the topic was not covered or the answer was short. "evidence" lists the exact things the candidate said or did (at most 3, short, from the transcript); "missing" lists the evidence that would be needed to rate higher; "confidence" is low, medium or high depending on how much evidence there is; "reason" is one sentence tying the rating to the evidence. "score" is 0 to 100 for rated competencies and null for insufficient_evidence. Do not reward verbosity, confidence, fluency, accent, personality or appearance as a substitute for job-relevant evidence. Credit only what the candidate personally did, not what their team achieved. "unverified_claims" lists claims the candidate made that nothing in the interview, the documents or the online check supports; keep them separate from demonstrated ability. "demonstrated" in the summary refers only to evidence.
 SCORING: "overall" is an integer 0 to 100 for the whole interview as a decision-maker would see it. Bands: 85+ would clearly be accepted; 70 to 84 good, probably accepted; 55 to 69 borderline, real doubts; 40 to 54 weak, probably rejected; under 40 not ready. Most candidates in an honest interview land between 45 and 75. Do not give 70 or more to an interview where key questions were evaded, claims were unsupported or contradicted, or answers were vague. Give under 30 where most answers were missing, off-topic or nonsense. "verdict_reason": one sentence saying what decided the score.
-For every observation, "turn_id" must be a CANDIDATE turn and "quote" must be the exact words (at most 25) copied from that turn that the note is about. Do not invent or reword quotes. For every observation with tone "improve", add "better": a stronger version of that answer in one or two sentences, using only facts the candidate already gave; where a number or example is missing, write a placeholder like [your number] instead of inventing one.
+For every observation, keep "note" to one plain sentence a non-expert understands. "turn_id" must be a CANDIDATE turn and "quote" must be the exact words (at most 25) copied from that turn that the note is about. Do not invent or reword quotes. For every observation with tone "improve", add "better": a stronger version of that answer in one or two sentences, using only facts the candidate already gave; where a number or example is missing, write a placeholder like [your number] instead of inventing one.
 If the transcript contains a submitted solution to a hands-on task, judge it as work: correctness (use the automatic check results if given), approach, edge cases, clarity, and how well the candidate explained it. Cite the actual code or text. Write all feedback text in {lang_of(ws)}. INTERVIEWER RUBRICS (what each panelist listens for): {rubric_text(ws)}.\nFor this interview type, weigh most heavily: {kinds.profile(ws.kind)['eval']}.
-Return JSON only: {{"overall": int, "verdict_reason": str, "summary": str, "strengths": [str], "improvements": [str],
+WRITE FOR A PERSON, NOT AN EXAMINER. The candidate will read this once, quickly, and must understand it at once. Use plain everyday words and short sentences. No jargon, no labels like "competency" or "demonstrates", no filler or praise padding. Talk to them directly ("you"). Say only what matters most.
+"summary": 2 or 3 short sentences: how the interview went overall, and the one thing that decided the score. "strengths": at most 3 items, each one short sentence naming what they did well and the proof ("You gave a real number when you described the launch"). "improvements": at most 3 items, the most important first, each an object {{"title": "the problem in 3 to 8 plain words", "what_happened": "one sentence, using something they actually said", "fix": "one sentence: exactly what to do next time", "example": "how to say it better in one or two sentences, using only facts they gave; use [your number] where a figure is missing"}}. If a hands-on task was done, one of the strengths or improvements must be about it. Fewer, clearer points beat a long list.
+Return JSON only: {{"overall": int, "verdict_reason": str, "summary": str, "strengths": [str], "improvements": [{{"title": str, "what_happened": str, "fix": str, "example": str}}],
 "scores": {{"technical": int|null, "system_design": int|null, "communication": int|null, "behavioural": int|null, "strategic": int|null, "company": int|null}},
 "category_notes": {{"<category>": "one sentence about the pattern"}},
 "competencies": [{{"key": "from the rubric", "rating": "demonstrated|partial|not_demonstrated|insufficient_evidence", "score": int|null, "evidence": [str], "missing": [str], "confidence": "low|medium|high", "reason": str}}],
@@ -609,7 +611,7 @@ Return JSON only: {{"overall": int, "verdict_reason": str, "summary": str, "stre
     unverified = [_s(x, 200) for x in (d.get("unverified_claims") if isinstance(d.get("unverified_claims"), list) else []) if _s(x, 200)][:8]
     summary = str(d.get("summary", ""))
     ev, _ = Evaluation.objects.update_or_create(session=sess, defaults=dict(scores=d.get("scores", {}), summary=summary, observations=obs, overall=score, verdict=verdict_for(score), checks=found, competencies=comps, unverified=unverified,
-                                                                          improvements=d.get("improvements", []), strengths=d.get("strengths", [])))
+                                                                          improvements=_imps(d.get("improvements")), strengths=[_s(x, 220) for x in (d.get("strengths") if isinstance(d.get("strengths"), list) else []) if _s(x, 220)][:3]))
     return ev, d.get("category_notes", {})
 
 # ---------- Vision Agent ----------

@@ -2,11 +2,9 @@
 1. builds the interviewer's instructions from the same interview context the standard engine uses (candidate, role, research, agenda, persona), and
 2. mints a short-lived, single-purpose token that is locked to that configuration, so the real API key and the instructions never reach the browser.
 The audio itself travels browser <-> Google. Transcripts come back through room_live_turns and are saved as ordinary Turn rows."""
-import datetime, hashlib, itertools
+import datetime, hashlib, random
 from django.conf import settings
 from . import agents
-
-_turn = itertools.count()   # hands each new interview the next key, so several live interviews at once spread over all the keys
 
 FEMALE = ["Kore", "Aoede", "Leda"]
 MALE = ["Puck", "Charon", "Fenrir"]
@@ -44,24 +42,23 @@ HOW TO SPEAK ON THE CALL:
 - The first message you receive tells you to begin. Greet the candidate{(' by first name (' + first + ')') if first else ''}, say who you are and your role in one short sentence, and ask your first question. Do not describe what you will do.
 - During the call you will receive short written messages from the system: a PRIVATE NOTE with a verified fact, an instruction to hand the candidate a hands-on task, or the candidate's submitted solution to review. Follow them exactly, in your own natural words, and never mention that you were given a note.
 - While the candidate works on a hands-on task, stay quiet. They may think aloud: do not comment on every sentence. Speak only if they ask you something or say they are stuck, and never coach them towards the answer.
-- The interview lasts {ws.duration} minutes and you decide nothing about its length. Until the system tells you that time is nearly up, NEVER wrap up, never say goodbye and never thank the candidate for their time; if you run out of planned areas, go deeper on the weakest evidence.
-- You can end the interview yourself with the end_interview tool, in two cases only. reason="finished": the candidate clearly says they are done or want to stop, or every area is covered and the time is nearly used. reason="unprofessional": the candidate is abusive, insulting, harassing, sexual, threatening or discriminatory, or keeps refusing to take the interview seriously. The first time, do not end it: say calmly that this is a professional interview and you need it to stay that way, and carry on. End it only if it continues after that warning (pass warned_before=true), or at once for threats, slurs, sexual harassment or hate (pass severe=true). Never end for nerves, silence, "I don't know", weak answers or criticism of the process. To end: FIRST say your closing words out loud (thanks, what happens next, goodbye; for unprofessional conduct, a calm, firm, polite statement that you are ending the interview because it has not stayed professional), with no question, THEN call end_interview.
+- The interview lasts {ws.duration} minutes. Do not wrap up just because you have asked a few questions: if you run out of planned areas, go deeper on the weakest evidence. You can end the interview yourself by calling the function end_interview, in exactly two situations. (1) It has genuinely run its course: every area of the plan is covered with enough evidence, or the candidate says they are finished or want to stop. Use reason "completed". (2) The candidate is unprofessional: abusive, insulting, discriminatory, sexually inappropriate, clearly not taking the interview seriously, refusing to engage, or deliberately wasting time. First say once, calmly, what you expect; if it continues, end it. For severe abuse or harassment, end it at once. Use reason "unprofessional". Always say your closing words out loud FIRST (completed: thank the candidate and say what happens next; unprofessional: one calm, professional sentence that you are ending the interview because of the candidate's conduct), THEN call end_interview, then say nothing more. Never end it for nervousness, a pause to think, a weak answer or a technical problem.
 - When told that time is nearly up, wrap up the way the real interview would end: a closing remark, thank the candidate and say what happens next in the process. Ask no new question, not even 'do you have any questions', and say goodbye: the meeting ends when you stop speaking."""
 
 def mint(sess):
     """Returns what the browser needs to open one Live session. Raises on any failure; the caller falls back to the standard interview."""
     from google import genai
     ws = sess.workspace; iv = lead_of(sess); voice = voice_for(iv)
-    keys = list(settings.LIVE_GEMINI_KEYS); first = next(_turn) % len(keys); keys = keys[first:] + keys[:first]
     now = datetime.datetime.now(tz=datetime.timezone.utc)
     cfg = {"response_modalities": ["AUDIO"], "system_instruction": instruction(sess),
            "speech_config": {"voice_config": {"prebuilt_voice_config": {"voice_name": voice}}},
            "input_audio_transcription": {}, "output_audio_transcription": {},   # transcripts are for the interview record; the model itself hears the audio
            "session_resumption": {}, "context_window_compression": {"sliding_window": {}},
-           "tools": [{"function_declarations": [{"name": "end_interview", "description": "Ends the interview after your spoken closing words. Only for the two cases in your instructions.",
-                                                 "parameters": {"type": "OBJECT", "properties": {"reason": {"type": "STRING", "enum": ["finished", "unprofessional"]}, "severe": {"type": "BOOLEAN"}, "warned_before": {"type": "BOOLEAN"}}, "required": ["reason"]}}]}]}
+           "tools": [{"function_declarations": [{"name": "end_interview", "description": "Ends the live interview now. Say your closing words out loud before calling it.",
+                      "parameters": {"type": "OBJECT", "properties": {"reason": {"type": "STRING", "enum": ["completed", "unprofessional"]}}, "required": ["reason"]}}]}]}
+    keys = list(settings.LIVE_GEMINI_KEYS); random.shuffle(keys)   # up to three keys share the live interviews; if one is out of quota the next is tried
     tok = None; err = None
-    for key in keys:   # if one key is out of quota or rejected, the next one is tried before falling back to the standard interview
+    for key in keys:
         try:
             client = genai.Client(api_key=key, http_options={"api_version": "v1alpha"})
             tok = client.auth_tokens.create(config={
@@ -70,7 +67,7 @@ def mint(sess):
                 "live_connect_constraints": {"model": settings.LIVE_MODEL, "config": cfg}, "http_options": {"api_version": "v1alpha"}})
             break
         except Exception as e: err = e
-    if tok is None: raise err
+    if tok is None: raise err or RuntimeError("No live key is set.")
     lead = {"id": iv.id, "name": iv.name, "position": iv.position, "image": f"/static/{iv.image}"}
     return {"token": tok.name, "model": settings.LIVE_MODEL, "lead": lead, "voice": voice, "limit_s": int(ws.duration) * 60,
             "opening": "Begin the interview now."}
