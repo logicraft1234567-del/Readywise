@@ -10,7 +10,7 @@ document.addEventListener("DOMContentLoaded",()=>{
   /* the one orchestrated moment: the hero lines settle, then the panel frame arrives */
   const hero=document.querySelector(".hero-h");
   let heroTl=null;
-  if(window.gsap&&hero&&!reduce){
+  if(window.gsap&&hero&&!reduce&&!document.querySelector("[data-cin]")){  /* the cinematic landing runs its own scene engine (js/cinema.js) */
     heroTl=gsap.timeline({defaults:{ease:"power3.out"},paused:!!window.rwIntro});
     heroTl.from(".hero-h .ln",{yPercent:105,duration:.9,stagger:.1}).from(".hero-fade",{y:14,opacity:0,duration:.7,stagger:.08},"-=.55").from(".hero-frame",{y:28,opacity:0,duration:1,ease:"power2.out"},"-=.8");
   }

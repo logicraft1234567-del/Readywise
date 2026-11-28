@@ -146,7 +146,7 @@ def test_dark_mode_assets(client, db):
     assert "toggleTheme" in client.get("/").content.decode()
 
 def test_intro_wired(client, db):
-    h = client.get("/").content.decode(); assert "rwCountdown" in h and "intro.js" in h and "Replay intro" in h
+    h = client.get("/").content.decode(); assert "rwReveal" in h and "reveal.js" in h and "Replay intro" in h and "data-stage" in h
 
 def test_room_uses_countdown(client_in):
     logic.ensure_seed(); c = client_in; c.post("/w/new/", {"title": "T"}); ws = Workspace.objects.get(); ws.panel.set(Interviewer.objects.filter(owner=None)[:1])

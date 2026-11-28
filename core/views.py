@@ -44,7 +44,7 @@ def guide(request):
 def landing(request):
     if request.user.is_authenticated: return redirect("dashboard")
     logic.ensure_seed()
-    return render(request, "core/landing.html", {"team": Interviewer.objects.filter(owner=None)[:9], "faqs": FAQS})
+    return render(request, "core/landing.html", {"team": Interviewer.objects.filter(owner=None)[:9], "faqs": FAQS, "kinds": [c[1] for c in KIND_CARDS]})
 
 @require_POST
 def contact(request):
