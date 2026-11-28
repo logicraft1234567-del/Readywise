@@ -33,7 +33,7 @@ html .border-white{border-color:var(--surface)}
 *{box-sizing:border-box}html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
 ::selection{background:var(--b1);color:var(--on-b1)}
 :focus-visible{outline:2px solid var(--b1);outline-offset:2px;border-radius:var(--r1)}
-body{margin:0;font-family:var(--ui);font-size:15px;line-height:1.6;color:var(--ink);background:var(--paper);min-height:100vh;overflow-x:clip;-webkit-font-smoothing:antialiased;font-feature-settings:"ss01","cv11"}
+body{margin:0;font-family:var(--ui);font-size:15px;line-height:1.6;color:var(--ink);background:var(--paper);min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased;font-feature-settings:"ss01","cv11"}
 html h1,html h2,html h3,html h4,html .disp{font-family:var(--ui);font-weight:600;letter-spacing:-.015em;line-height:1.2;margin:0}
 html h1,html h2{font-family:var(--display);font-weight:500;letter-spacing:-.022em;line-height:1.08}
 html h4{font-weight:600}html body b,html body strong{font-weight:600}
@@ -105,7 +105,7 @@ label.l{display:block;font-weight:500;font-size:.84rem;margin:1rem 0 .35rem;colo
 
 /* app shell */
 .app{display:grid;grid-template-columns:256px minmax(0,1fr);min-height:100vh}
-.side{position:sticky;top:0;align-self:start;height:100vh;height:100dvh;margin:0;padding:1rem .8rem;display:flex;flex-direction:column;gap:.15rem;overflow-y:auto;z-index:40;background:var(--surface);border:0;border-right:1px solid var(--line);border-radius:0;box-shadow:none}
+.side{position:sticky;top:0;height:100vh;margin:0;padding:1rem .8rem;display:flex;flex-direction:column;gap:.15rem;overflow-y:auto;z-index:40;background:var(--surface);border:0;border-right:1px solid var(--line);border-radius:0;box-shadow:none}
 .side .logo{padding:.3rem .5rem;margin-bottom:.9rem}
 .side .grp{font-size:.78rem;font-weight:500;color:var(--mut);margin:1.3rem .6rem .35rem;letter-spacing:0}
 .side a.nl{display:flex;gap:.7rem;align-items:center;padding:.5rem .65rem;border-radius:8px;color:var(--ink2);text-decoration:none;font-weight:500;font-size:.9rem;transition:background .15s,color .15s}

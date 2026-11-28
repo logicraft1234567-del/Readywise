@@ -1,120 +1,154 @@
 {% extends 'core/base.html' %}{% load static %}
-{% block head %}<link rel="stylesheet" href="{% static 'css/landing.css' %}"><link rel="stylesheet" href="{% static 'css/story.css' %}"><link rel="stylesheet" href="{% static 'css/cinema.css' %}"><noscript><style>.cin .a{opacity:1!important;transform:none!important}.hero-h .ln{transform:none!important}</style></noscript>{% endblock %}
+{% block head %}<link rel="stylesheet" href="{% static 'css/landing.css' %}"><link rel="stylesheet" href="{% static 'css/story.css' %}"><script>window.rwIntro=!sessionStorage.getItem("rw-intro")&&!matchMedia("(prefers-reduced-motion: reduce)").matches</script><script src="{% static 'js/reveal.js' %}"></script>{% endblock %}
 {% block body %}
-<div class="cin" data-cin>
-<nav class="rail" aria-label="Scenes" data-rail></nav>
+<script>if(window.rwIntro){try{sessionStorage.setItem("rw-intro","1")}catch(e){}document.addEventListener("DOMContentLoaded",()=>rwReveal({src:"{% static 'video/reveal.mp4' %}",mark:"{% static 'img/r-mark.svg' %}",tagline:"Prepare smarter. Perform better.",onDone:()=>window.rwHeroPlay&&window.rwHeroPlay()}))}</script>
 
-<header class="hero sc" id="top" data-sc="Start">
- <div class="hero-bg" aria-hidden="true"><video autoplay muted loop playsinline preload="auto" poster="{% static 'img/reveal-poster.jpg' %}"><source src="{% static 'video/reveal.mp4' %}" type="video/mp4"></video></div>
- <div class="wrap hero-in">
-  <h1 class="hero-h"><span class="mask"><span class="ln">Walk in</span></span><span class="mask"><span class="ln">already ready.</span></span></h1>
-  <p class="hero-p a" style="--d:900">ReadyWise researches your interview, builds the panel that will question you, checks what you say against the facts, and shows you what to fix before the real thing.</p>
-  <div class="lp-cta-row a" style="--d:1100"><a class="btn solid" href="{% url 'register' %}"><span class="bl">Create my interview workspace</span><span class="bs">Create workspace</span></a><button type="button" class="btn ghost" data-story-open><span class="st-play-badge" aria-hidden="true"></span>Play the story</button></div>
+<header class="wrap lp-hero">
+ <div>
+  <h1 class="lp-h1 hero-h"><span class="mask"><span class="ln">Walk in</span></span><span class="mask"><span class="ln">already ready.</span></span></h1>
+  <p class="lp-lead hero-fade">ReadyWise researches your opportunity, builds the panel that will question you, trains you every day, and shows you exactly what to fix before the real interview.</p>
+  <div class="lp-cta-row hero-fade"><a class="btn solid" href="{% url 'register' %}"><span class="bl">Create my interview workspace</span><span class="bs">Create workspace</span></a><button type="button" class="btn" data-story-open><span class="st-play-badge" aria-hidden="true"></span>See story</button></div>
+  <p class="lp-fine hero-fade">Ten interview types, from jobs and admissions to visas and investor pitches. Works from your CV and the description you already have.</p>
  </div>
- <div class="scroll-cue a" style="--d:1600" aria-hidden="true"><i></i></div>
+ <div class="hero-frame" aria-label="Example of a practice interview">
+  <div class="pf-bar"><b>Practice interview</b><span>Example session</span></div>
+  <div class="pf-tiles">{% for i in team|slice:":3" %}<div class="pf-tile" data-who="{{ i.name }}, {{ i.position }}" data-q="{% if forloop.counter == 1 %}Start with the decision you are proudest of. What did it cost you?{% elif forloop.counter == 2 %}You said the team shipped it. What exactly did you ship, and what did you own?{% else %}Before we finish, what would you want to know about this role?{% endif %}"><img src="{% static i.image %}" alt="{{ i.name }}, {{ i.position }}"><span class="pf-n">{{ i.name }}<small>{{ i.position }}</small></span><span class="wv"><i></i><i></i><i></i><i></i><i></i></span></div>{% endfor %}</div>
+  <div class="pf-cap"><div data-speaker>Panel</div><p data-cap>Start with the decision you are proudest of. What did it cost you?</p></div>
+  <div class="pf-note"><span class="tag t-candidate_reported">candidate-reported</span>Candidates mention a system design round.<small>seen in 3 sources</small></div>
+ </div>
 </header>
 
-<section class="sc scene" id="research" data-sc="Research"><div class="wrap two">
- <div class="cap"><h2>It researches the real interview first.</h2><p>Official pages, candidate accounts on forums and reviews, and interview videos with captions. Every finding says where it came from and how sure it is.</p></div>
- <div class="reel"><div class="reel-h a" style="--d:100"><b>Findings</b><span>Example</span></div>
-  <div class="row a" style="--d:500"><div class="g">The process has a take-home task before the panel round.<small>Company careers page</small></div><span class="tag t-confirmed">confirmed</span></div>
-  <div class="row a" style="--d:1100"><div class="g">Candidates describe a system design question about queues.<small>Forum threads and a review site</small></div><span class="tag t-candidate_reported">candidate-reported</span></div>
-  <div class="row a" style="--d:1700"><div class="g">Expect questions on ownership and prioritisation.<small>From the job description</small></div><span class="tag t-inferred">inferred</span></div>
-  <div class="reel-f a" style="--d:2300">A forum post is never marked confirmed. Sources older than three years are flagged.</div></div>
-</div></section>
+<div class="lp-types"><div class="wrap"><ul><li>Jobs</li><li>Internships</li><li>Graduate programmes</li><li>University admission</li><li>Scholarships</li><li>Visa practice</li><li>Fellowships</li><li>Investor pitches</li><li>Certifications</li></ul></div></div>
 
-<section class="sc scene" id="panel" data-sc="Panel"><div class="wrap two flip">
- <div class="cap"><h2>The panel matches the real one.</h2><p>ReadyWise looks up how many people usually interview for your role, from one to three, and picks the best-fit interviewers. If the research can’t find it, you choose the number.</p></div>
- <div class="reel"><div class="reel-h a" style="--d:100"><b>Panel for this interview</b><span>Example</span></div>
-  <div class="tiles">{% for i in team|slice:":3" %}<figure class="tile a {% if forloop.counter == 3 %}off{% endif %}" style="--d:{{ forloop.counter0 }}00;--t:{{ forloop.counter0 }}"><img src="{% static i.image %}" alt="{{ i.name }}, {{ i.position }}"><figcaption><b>{{ i.name }}</b><span>{{ i.position }}</span></figcaption></figure>{% endfor %}</div>
-  <div class="reel-f a" style="--d:1500">The real process uses two interviewers, so the panel has two. One speaks at a time, and nobody repeats a question.</div></div>
-</div></section>
-
-<section class="sc scene" id="plan" data-sc="Plan"><div class="wrap two">
- <div class="cap"><h2>A plan built from your CV and the research.</h2><p>Add your CV and the job description. You get a day-by-day plan, and you can add it to your calendar.</p></div>
- <div class="reel"><div class="reel-h a" style="--d:100"><b>Prep plan</b><span>Example</span></div>
-  <div class="row a" style="--d:400"><span class="ck" style="--c:1500"></span><div class="g">Rewrite your two strongest stories in STAR form<small>Behavioural</small></div><span class="tm">Mon</span></div>
-  <div class="row a" style="--d:800"><span class="ck" style="--c:2300"></span><div class="g">Sketch a queue-based system design out loud<small>Technical, from the research</small></div><span class="tm">Wed</span></div>
-  <div class="row a" style="--d:1200"><span class="ck" style="--c:3100"></span><div class="g">Panel session with the technical lead<small>Practice</small></div><span class="tm">Fri</span></div>
-  <div class="reel-f a" style="--d:1800">Export to any calendar as an .ics file.</div></div>
-</div></section>
-
-<section class="sc scene" id="room" data-sc="Interview"><div class="wrap two flip">
- <div class="cap"><h2>Then you practise out loud.</h2><p>Answer by voice or by typing. The panel follows up on vague answers, changes direction and watches the clock. The camera is optional, and recording only starts if you tick the consent box.</p></div>
- <div class="reel"><div class="reel-h a" style="--d:100"><b>Interview room</b><span class="live"><i></i>Example</span></div>
-  <div class="bub a" style="--d:500"><b>Technical lead</b>You mentioned the cache. What happens when it goes down?</div>
-  <div class="bub me a" style="--d:1600"><b>You</b>Requests fall through to the database, so I added a rate limit in front of it.</div>
-  <div class="bub a" style="--d:2800"><b>HR director</b>Hold on. Who decided on the rate limit, you or the team?</div>
-  <div class="chips a" style="--d:3400"><span class="chip ok">In frame · facing screen</span><span class="chip">Answer time: 90 s</span></div></div>
-</div></section>
-
-<section class="sc scene" id="facts" data-sc="Fact-check"><div class="wrap two">
- <div class="cap"><h2>Say something wrong and the panel knows.</h2><p>Public facts in your answers, such as prices, dates and figures, are checked online while you talk. If one is wrong, the panel gets the verified figure and the source, then asks you about it. A check that is slow never stops the interview.</p></div>
- <div class="reel"><div class="reel-h a" style="--d:100"><b>Live fact-check</b><span>Example</span></div>
-  <div class="bub me a" style="--d:400"><b>You</b>Our market is worth 40 billion dollars a year.</div>
-  <div class="check a" style="--d:1400"><span class="spin"></span>Checking the claim online</div>
-  <div class="verdict a" style="--d:2600"><span class="tag t-wrong">wrong</span><div class="g">The sector was valued at about 12 billion dollars in 2025.<small>Source: industry report, named in the session</small></div></div>
-  <div class="bub a" style="--d:3800"><b>Investor</b>Your figure is three times the published one. Where does 40 billion come from?</div></div>
-</div></section>
-
-<section class="sc scene" id="report" data-sc="Report"><div class="wrap two flip">
- <div class="cap"><h2>A score that shows its working.</h2><p>The AI judges evidence against a rubric set before the interview. Plain code does the maths, leaves out skills you never reached, and reports how much evidence it had. Every note has a time and a stronger version of your answer.</p></div>
- <div class="reel"><div class="reel-h a" style="--d:100"><b>Report</b><span>Example</span></div>
-  <div class="sk a" style="--d:300"><div><b>Strategy</b><span>72</span></div><i style="--w:72%"></i></div>
-  <div class="sk a" style="--d:600"><div><b>Technical depth</b><span>48</span></div><i style="--w:48%"></i></div>
-  <div class="sk a" style="--d:900"><div><b>Communication under pressure</b><span>not assessed</span></div><i style="--w:0%"></i></div>
-  <div class="row a" style="--d:1700"><span class="tm">07:41</span><div class="g"><span class="tag t-candidate_reported">improve</span> Your answer drifted into the team’s work.<div class="better"><b>A stronger answer:</b> I owned the rate limit. I proposed it, built it and measured the drop in timeouts.</div></div></div>
-  <div class="reel-f a" style="--d:2400">If you allowed recording, click a note to jump to that moment.</div></div>
-</div></section>
-
-<section class="sc scene" id="adapt" data-sc="Adapt"><div class="wrap two">
- <div class="cap"><h2>Your results change the plan.</h2><p>Weak skills get drills and a focused panel session. Mastered topics shrink to a quick check. Miss a day and the tasks move to the days you have left. Nothing essential is dropped.</p></div>
- <div class="reel"><div class="reel-h a" style="--d:100"><b>Plan adjusted from your results</b><span>Example</span></div>
-  <div class="row a" style="--d:500"><div class="g">Drill: queues and back-pressure<small>Thursday</small></div><span class="tag t-confirmed">added</span></div>
-  <div class="row a" style="--d:1100"><div class="g">Re-read the product overview<small>Mastered, now a quick check</small></div><span class="tag t-inferred">trimmed</span></div>
-  <div class="row a" style="--d:1700"><div class="g">Focused panel session on technical depth<small>Saturday</small></div><span class="tag t-confirmed">added</span></div></div>
-</div></section>
-
-<section class="sc scene" id="range" data-sc="Formats"><div class="wrap">
- <div class="cap wide"><h2>{{ kinds|length }} kinds of interview, one engine.</h2><p>Each type has its own questions, research, panel and scoring. A visa interview has no technical score, and a pitch scores market and traction.</p></div>
- <ul class="kinds">{% for k in kinds %}<li class="a" style="--d:{{ forloop.counter0 }}00">{{ k }}</li>{% endfor %}</ul>
- <div class="trio">
-  <div class="a" style="--d:300"><h3>Formats set for you</h3><p>The format moves from standard to challenging, high pressure, executive or unknown questions as your scores rise. It stays professional.</p></div>
-  <div class="a" style="--d:500"><h3>Practise as a team</h3><p>Invite up to four teammates by email. You share one workspace, split the plan and agree one time for the practice interview.</p></div>
-  <div class="a" style="--d:700"><h3>Twelve languages</h3><p>Interview in English, French, Spanish, Portuguese, German, Arabic, Hausa, Yoruba, Igbo, Swahili, Hindi or Mandarin. Spoken voices are English only. Other languages use your browser’s voice.</p></div>
-  <div class="a" style="--d:900"><h3>Pitches and hackathons</h3><p>For products, ReadyWise finds the competitors that really compete, checks each one, and drops names that only share a keyword.</p></div>
+<section id="film" class="rw-film" aria-labelledby="film-h">
+ <div class="wrap">
+  <div class="rw-film-head"><h2 id="film-h" class="lp-h2">See it work in a minute.</h2><p class="lp-lead">Add your CV and the role, get sourced research and a plan, then practise aloud with the panel.</p></div>
+  <div class="rw-stage-b"><div class="rw-stage" data-stage>
+   <video src="{% static 'video/film.mp4' %}" poster="{% static 'img/film-poster.jpg' %}" preload="none" playsinline controls aria-label="ReadyWise product film, 1 minute 5 seconds"></video>
+   <button type="button" class="rw-play" data-stage-play aria-label="Play the film"><span class="rw-play-ring" aria-hidden="true"></span><svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.2v13.6a1 1 0 0 0 1.5.86l11-6.8a1 1 0 0 0 0-1.72l-11-6.8A1 1 0 0 0 8 5.2z"/></svg></button>
+   <div class="rw-stage-cap"><img src="{% static 'img/r-mark.svg' %}" alt=""><span>Product film, 1:05</span></div>
+  </div></div>
  </div>
-</div></section>
+</section>
 
-<section id="evidence" class="sc scene" data-sc="Honesty"><div class="wrap two">
- <div class="cap"><h2>Practice, not prediction.</h2><p>Scores describe how you performed in practice. They never say whether you will be hired, admitted or given a visa. Research that can’t be reached, such as login-walled sites, is left out, not guessed.</p></div>
- <div class="reel"><div class="stat a" style="--d:200"><span class="tag t-confirmed">confirmed</span><p>Backed by an official source, such as the company, a university or an embassy.</p></div>
-  <div class="stat a" style="--d:500"><span class="tag t-candidate_reported">candidate-reported</span><p>From forums, reviews or videos. Useful, never marked confirmed, and ReadyWise shows how many sources agree.</p></div>
-  <div class="stat a" style="--d:800"><span class="tag t-inferred">inferred</span><p>A reasonable expectation from your role or the job description, with nothing external behind it yet.</p></div></div>
-</div></section>
+<section id="problem" class="sec wrap lp-split">
+ <div class="lp-sticky"><h2 class="lp-h2">Practising alone doesn’t feel like the real thing.</h2></div>
+ <div class="lp-rows">
+  <div class="rv"><h3>One voice, one style</h3><p>Real panels have a CEO, a manager, HR and an engineer, and a visa interview is nothing like an investor pitch. Most practice tools give you one chatbot for everything.</p></div>
+  <div class="rv"><h3>Generic questions</h3><p>Question lists ignore your CV, the company and the role you are actually applying for.</p></div>
+  <div class="rv"><h3>No plan, no memory</h3><p>You repeat the same mistakes because nothing tracks what you got wrong last time.</p></div>
+ </div>
+</section>
 
-<section id="guide" class="sc scene" data-sc="Start"><div class="wrap">
- <div class="cta-big"><h2>Walk in already ready.</h2><p>Set up a workspace in a minute. Add the role and your CV, and ReadyWise does the research.</p>
-  <div class="lp-cta-row"><a class="btn solid" href="{% url 'register' %}"><span class="bl">Create my interview workspace</span><span class="bs">Create workspace</span></a><button type="button" class="btn ghost" data-film-open="walk"><span class="st-play-badge" aria-hidden="true"></span><span class="bl">Watch the walkthrough</span><span class="bs">Walkthrough</span></button><a class="btn ghost" href="{% url 'guide' %}"><span class="bl">Read the full guide</span><span class="bs">Guide</span></a></div></div>
-</div></section>
+<section id="how" class="sec wrap" style="padding-top:2rem">
+ <h2 class="lp-h2">From first click to final check.</h2>
+ <p class="lp-lead" style="margin-top:1.1rem">Every step feeds the next. Research shapes your panel, your panel shapes the plan, and each session updates what ReadyWise knows about you.</p>
+ <ol class="lp-steps">
+  <li class="lp-step rv"><span class="n">1</span><h3>Research</h3><p>Sourced findings about the opportunity, the people who went through it, and the videos they made.</p></li>
+  <li class="lp-step rv"><span class="n">2</span><h3>Panel</h3><p>ReadyWise picks up to three interviewers and a difficulty from what the research found.</p></li>
+  <li class="lp-step rv"><span class="n">3</span><h3>Prep plan</h3><p>A day-by-day plan from your CV, the role and the research. It changes as you improve.</p></li>
+  <li class="lp-step rv"><span class="n">4</span><h3>Practice</h3><p>Speak to the panel on camera. They follow up, challenge and watch the clock.</p></li>
+  <li class="lp-step rv"><span class="n">5</span><h3>Readiness</h3><p>Replay by timestamp, see what to fix next, and what to ask the real interviewer.</p></li>
+ </ol>
+</section>
+
+<section id="panel" class="sec wrap" style="padding-top:2rem">
+ <div class="lp-panel-head"><div><h2 class="lp-h2">Meet your panel.</h2><p class="lp-lead" style="margin-top:1.1rem">You don’t pick the panel or the difficulty. ReadyWise assigns them from your research, the way a real hiring process would.</p></div>
+ <ul class="lp-facts"><li><i data-lucide="check" width="17"></i>Three interviewers at most</li><li><i data-lucide="check" width="17"></i>One speaks at a time, the rest listen</li><li><i data-lucide="check" width="17"></i>Each sees only the memory they need</li></ul></div>
+ <div class="lp-team">{% for i in team|slice:":4" %}<figure class="rv"><img src="{% static i.image %}" alt="{{ i.name }}" loading="lazy"><figcaption><b>{{ i.name }}</b><span class="role">{{ i.position }}</span><p>{{ i.personality }}</p></figcaption></figure>{% endfor %}</div>
+</section>
+
+<section id="features" class="sec wrap" style="padding-top:2rem">
+ <h2 class="lp-h2">Seven connected systems. No add-ons.</h2>
+ <div class="fx" data-fx>
+  <div class="fx-list" role="tablist" aria-label="Features">
+   <button type="button" role="tab" class="fx-item" data-fx-item="graph"><b>Interview Intelligence Graph</b><span>Company, role and candidate-reported findings, each with a source, a date and a confidence level.</span></button>
+   <button type="button" role="tab" class="fx-item" data-fx-item="plan"><b>Personalised preparation</b><span>A day-by-day plan built from your CV, the job description, the research and your panel.</span></button>
+   <button type="button" role="tab" class="fx-item" data-fx-item="live"><b>Live multi-person interview</b><span>Camera, voice and a panel that follows up, challenges and manages the clock. No fixed question list.</span></button>
+   <button type="button" role="tab" class="fx-item" data-fx-item="replay"><b>Replay and evidence-based feedback</b><span>Transcript, speakers, timestamps and notes. Click a moment to replay it.</span></button>
+   <button type="button" role="tab" class="fx-item" data-fx-item="memory"><b>Adaptive interview memory</b><span>Tom knows your strategy gaps, Mask your technical ones, Sarah your behavioural ones. Nobody sees more than they need.</span></button>
+   <button type="button" role="tab" class="fx-item" data-fx-item="pressure"><b>Pressure simulation</b><span>Challenging, high-pressure, executive and unknown-question modes. Tough, never abusive.</span></button>
+   <button type="button" role="tab" class="fx-item" data-fx-item="adjust"><b>Automatic preparation adjustment</b><span>Struggle with system design three days out? ReadyWise re-ranks priorities, trims what you have mastered and adds drills. Miss a day and nothing essential is dropped.</span></button>
+  </div>
+  <div class="fx-stage" aria-live="polite">
+   <div class="fx-pane" data-fx-pane="graph"><div class="ui-h"><b>Findings and evidence</b><span>Example</span></div>
+    <div class="ui-row"><div class="grow">The process has a take-home task before the panel round.<small>Careers page, retrieved this month</small></div><span class="tag t-confirmed">confirmed</span></div>
+    <div class="ui-row"><div class="grow">Candidates describe a system design question about queues.<small>Two forum threads, one review site</small></div><span class="tag t-candidate_reported">candidate-reported</span></div>
+    <div class="ui-row"><div class="grow">Expect questions on ownership and prioritisation.<small>Inferred from the job description</small></div><span class="tag t-inferred">inferred</span></div></div>
+   <div class="fx-pane" data-fx-pane="plan"><div class="ui-h"><b>Prep plan</b><span>12 days to go</span></div>
+    <div class="ui-row"><span class="ui-check on"></span><div class="grow">Rewrite your two strongest stories in STAR form<small>Behavioural · done</small></div><span class="ui-time">Mon</span></div>
+    <div class="ui-row"><span class="ui-check"></span><div class="grow">Sketch a queue-based system design out loud<small>Technical · from the research</small></div><span class="ui-time">Wed</span></div>
+    <div class="ui-row"><span class="ui-check"></span><div class="grow">Panel session with the technical lead<small>Practice · focused</small></div><span class="ui-time">Fri</span></div></div>
+   <div class="fx-pane" data-fx-pane="live"><div class="ui-h"><b>Transcript</b><span>Live</span></div>
+    <div class="ui-bubble"><b>Technical lead</b>You mentioned the cache. What happens when it goes down?</div>
+    <div class="ui-bubble me"><b>You</b>Requests fall through to the database, so I added a rate limit in front of it.</div>
+    <div class="ui-bubble"><b>HR director</b>Hold on. Who decided on the rate limit, you or the team?</div></div>
+   <div class="fx-pane" data-fx-pane="replay"><div class="ui-h"><b>Timeline</b><span>Session of 18 minutes</span></div>
+    <div class="ui-row"><span class="ui-time">02:14</span><div class="grow"><span class="tag t-confirmed">positive</span> Clear opening, one concrete result.</div></div>
+    <div class="ui-row"><span class="ui-time">07:41</span><div class="grow"><span class="tag t-candidate_reported">improve</span> Answer drifted into the team’s work.<div class="ui-better"><b>A stronger answer:</b> I owned the rate limit. I proposed it, built it and measured the drop in timeouts.</div></div></div></div>
+   <div class="fx-pane" data-fx-pane="memory"><div class="ui-h"><b>Skills memory</b><span>Updated after each session</span></div>
+    <div class="ui-skill"><div class="top"><b>Strategy</b><span>72</span></div><div class="bar"><i style="width:72%"></i></div></div>
+    <div class="ui-skill"><div class="top"><b>Technical depth</b><span>48</span></div><div class="bar"><i style="width:48%"></i></div></div>
+    <div class="ui-skill"><div class="top"><b>Behavioural</b><span>61</span></div><div class="bar"><i style="width:61%"></i></div></div>
+    <div class="ui-skill"><div class="top"><b>Communication under pressure</b><span>not assessed</span></div><div class="bar"></div></div></div>
+   <div class="fx-pane" data-fx-pane="pressure"><div class="ui-h"><b>Interview format</b><span>Today</span></div>
+    <div class="ui-seg"><span>Standard</span><span>Challenging</span><span class="on">High pressure</span><span>Executive</span><span>Unknown question</span></div>
+    <p style="color:var(--ink2);max-width:46ch">Shorter answer windows and sharper follow-ups. The panel pushes on weak points but stays professional, and the report explains what it tested.</p></div>
+   <div class="fx-pane" data-fx-pane="adjust"><div class="ui-h"><b>Plan adjusted from your results</b><span>Just now</span></div>
+    <div class="ui-row"><div class="grow">System design drill: queues and back-pressure<small>Added by adjustment · Thursday</small></div><span class="tag t-confirmed">added</span></div>
+    <div class="ui-row"><div class="grow">Re-read the product overview<small>Mastered, moved to a quick check</small></div><span class="tag t-inferred">trimmed</span></div>
+    <div class="ui-row"><div class="grow">Focused panel session with the technical lead<small>Booked for Saturday</small></div><span class="tag t-confirmed">added</span></div></div>
+  </div>
+ </div>
+</section>
+
+<section id="evidence" class="sec wrap lp-ev">
+ <div><h2 class="lp-h2">Every finding says how sure it is.</h2><p class="lp-lead" style="margin-top:1.1rem">The rules are enforced in code, not left to the model’s mood. A forum post can’t be promoted to a fact, and old sources get flagged.</p></div>
+ <div>
+  <div class="lp-status"><span class="tag t-confirmed">confirmed</span><p>Backed by an official source, such as the company, a university or an embassy.</p></div>
+  <div class="lp-status"><span class="tag t-candidate_reported">candidate-reported</span><p>Comes from forums, reviews or interview videos. Useful, but never marked confirmed, and ReadyWise shows how many separate sources agree.</p></div>
+  <div class="lp-status"><span class="tag t-inferred">inferred</span><p>A reasonable expectation from your role or the job description, with nothing external behind it yet.</p></div>
+  <p class="lp-fine" style="margin-top:1.4rem">Scores come from rubrics and repeated observations. They describe practice performance, not your chance of being hired.</p>
+ </div>
+</section>
+
+<section id="guide" class="sec wrap">
+ <div class="lp-split" style="gap:5rem">
+  <div class="lp-sticky"><h2 class="lp-h2">New here? Start in five minutes.</h2><p class="lp-lead" style="margin-top:1.1rem">Five actions take you from sign-up to your first practice interview.</p><div class="lp-cta-row"><button type="button" class="btn solid" data-film-open="walk"><span class="st-play-badge" aria-hidden="true" style="color:#fff"></span><span class="bl">Watch the walkthrough</span><span class="bs">Watch</span></button><a class="btn" href="{% url 'guide' %}"><span class="bl">Read the full guide</span><span class="bs">Full guide</span></a></div></div>
+  <ol class="lp-quick">
+   <li><b>Create an account</b> and answer the guided questions. Skip any you like.</li>
+   <li><b>Add your CV</b> and the job or programme description, so the interview is about you.</li>
+   <li><b>Run the research.</b> It takes a minute or two and every finding shows its source.</li>
+   <li><b>Follow your plan</b> and practise in the room with your panel, by voice or by typing.</li>
+   <li><b>Read your report,</b> replay the moments to fix, and go again.</li>
+  </ol>
+ </div>
+ <div class="lp-why">
+  <a href="{% url 'guide' %}#ask" class="rv"><h3>Why we ask you questions</h3><p>Every answer changes something you can see: the research, the panel, the questions and your plan. Skip any of them and that part stays general.</p><span>See what we ask</span></a>
+  <a href="{% url 'guide' %}#research" class="rv"><h3>Why research comes first</h3><p>Practising for the wrong interview wastes your time. Research finds the real format, the real questions and the official requirements before you rehearse.</p><span>See how research works</span></a>
+  <a href="{% url 'guide' %}#data" class="rv"><h3>What happens to your data</h3><p>What is kept, who processes it, and what you control. Short notes with sources, never full pages, and scores that describe practice, not outcomes.</p><span>See your data and control</span></a>
+ </div>
+</section>
 
 <section id="faq" class="sec wrap lp-faq">
  <div><h2 class="lp-h2">Questions, answered.</h2></div>
  <div class="faq">{% for q,a in faqs %}<details><summary>{{ q }}<i data-lucide="plus" width="20"></i></summary><p>{{ a }}</p></details>{% endfor %}</div>
 </section>
 
-<section id="contact" class="sec wrap lp-contact"><div><h2 class="lp-h2">Talk to the ReadyWise team.</h2><p class="lp-lead" style="margin-top:1.1rem">Questions or feedback? Send a message.</p></div>
+<section class="wrap" style="padding-bottom:1rem"><div class="lp-cta"><div><h2>Walk in already ready.</h2><p>Set up a workspace in a minute. Add the role and your CV, and ReadyWise does the research.</p></div><a class="btn solid" href="{% url 'register' %}"><span class="bl">Create my interview workspace</span><span class="bs">Create workspace</span></a></div></section>
+
+<section id="contact" class="sec wrap lp-contact"><div><h2 class="lp-h2">Talk to the ReadyWise team.</h2><p class="lp-lead" style="margin-top:1.1rem">Questions or feedback? Send a message and we’ll reply by email.</p></div>
 <form method="post" action="{% url 'contact' %}" class="glass">{% csrf_token %}<label class="l" for="c-name" style="margin-top:0">Name</label><input id="c-name" class="field" name="name" required autocomplete="name"><label class="l" for="c-email">Email</label><input id="c-email" class="field" type="email" name="email" required autocomplete="email"><label class="l" for="c-msg">Message</label><textarea id="c-msg" class="field" rows="4" name="message" required></textarea><button class="btn solid" style="margin-top:1.3rem">Send message</button></form></section>
+
 
 {% include 'core/_film.html' with fid='story' flabel='The ReadyWise story' %}
 {% include 'core/_film.html' with fid='walk' flabel='How to use ReadyWise: a walkthrough' %}
 {% include 'core/_film_team.html' %}
-<script src="{% static 'js/film.js' %}"></script><script src="{% static 'js/story.js' %}"></script><script src="{% static 'js/guide-film.js' %}"></script><script src="{% static 'js/cinema.js' %}" defer></script>
+<script src="{% static 'js/stage.js' %}" defer></script><script src="{% static 'js/film.js' %}"></script><script src="{% static 'js/story.js' %}"></script><script src="{% static 'js/guide-film.js' %}"></script>
 
 <footer class="lp-foot"><div class="wrap"><div class="cols">
  <div><a class="logo" href="{% url 'landing' %}"><img src="{% static 'img/mark.svg' %}" alt="">ReadyWise</a><p style="margin-top:.9rem;color:var(--mut);max-width:34ch;font-size:.92rem">Your personal AI interview department.</p></div>
- <div><h4>Product</h4><ul><li><a href="#research">Research</a></li><li><a href="#panel">The panel</a></li><li><a href="#facts">Fact-check</a></li><li><a href="{% url 'guide' %}">How to use ReadyWise</a></li><li><a href="#guide" data-film-open="walk">Watch the walkthrough</a></li><li><a href="#faq">FAQ</a></li><li><a href="#story" data-story-open>Play the story</a></li></ul></div>
+ <div><h4>Product</h4><ul><li><a href="#how">How it works</a></li><li><a href="#panel">The panel</a></li><li><a href="#features">Features</a></li><li><a href="{% url 'guide' %}">How to use ReadyWise</a></li><li><a href="#guide" data-film-open="walk">Watch the walkthrough</a></li><li><a href="#faq">FAQ</a></li><li><a href="#film">Watch the film</a></li><li><a href="#story" data-story-open>Watch the story</a></li></ul></div>
  <div><h4>Account</h4><ul><li><a href="{% url 'login' %}">Log in</a></li><li><a href="{% url 'register' %}">Create an account</a></li><li><a href="#contact">Contact</a></li></ul></div></div>
- <div class="legal"><span>ReadyWise prepares you. It never predicts hiring, admission or visa decisions.</span></div></div></footer>
-</div>
+ <div class="legal"><span>ReadyWise prepares you. It never predicts hiring, admission or visa decisions.</span><a href="#" onclick="sessionStorage.removeItem('rw-intro');location.reload();return false">Replay intro</a></div></div></footer>
 {% endblock %}

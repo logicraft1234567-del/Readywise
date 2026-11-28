@@ -1,6 +1,6 @@
 # ReadyWise: your personal AI interview department
 
-Django + Groq. Panel of 1 to 3 AI interviewers, sourced research, adaptive plan, live voice/camera room, evidence-based reports, skills memory.
+Django + Groq. Panel of up to 5 AI interviewers, sourced research, adaptive plan, live voice/camera room, evidence-based reports, skills memory.
 
 ## Run
 Quickest: double-click `run.bat` (Windows) or run `./run.sh` (Mac/Linux). It installs packages, creates the database and starts the server.
@@ -50,7 +50,7 @@ Realtime streaming voice, WebRTC, Django Channels, Celery/Redis, Supabase storag
 `pytest` runs the full flow with Groq mocked. **Deploying to Render with PostgreSQL: see `DEPLOY_ON_RENDER.md`** (`render.yaml` creates the web service and the database).
 
 ## What ReadyWise does
-- **Interviewers and difficulty are chosen by the system** (1 to 3, `services/panelplan.py`). The size follows what the research found about the real process; the candidate picks the number only when the research cannot find it.
+- **Interviewers and difficulty are chosen by the system** (max 3, `services/panelplan.py`), per interview type (`services/kinds.py`).
 - **Introductions:** every panel member introduces themselves before the first question.
 - **Personal settings:** interview language, preferred style (friendly, balanced, strict), CV analysed into a structured profile, optional names of your real interviewers.
 - **Interviewer depth:** each interviewer has question themes (inspiration only) and a rubric of what they listen for.
@@ -112,7 +112,3 @@ A button label is never clipped on a phone (560px and narrower). Every button ha
 The same pattern covers buttons built in JavaScript: the journey "Next up" button (`.jbtn`, labels in `journey.js` each have a `short`), the planner cards and pop-up, the wizard (`.wz-btn` wraps and its main choices stack full width) and the story film end card (`.st-btn`). When you build a button in JavaScript, write both spans too.
 
 Rules: the short label keeps the same verb as the full one, in sentence case. Both `.btn` and the interview room's `.rm-btn` use the pattern. `tests/test_buttons.py` fails if a label longer than 17 characters has no short form, or an icon-only button has no accessible name.
-
-
-## Landing page (Nov 28 2026)
-The landing page is a dark, scene-by-scene film: `templates/core/landing.html`, `css/cinema.css`, `js/cinema.js` (own scene engine, no ScrollTrigger needed). The hero plays `video/reveal.mp4`. Each scene is a real piece of the product, labelled Example where the data is illustrative. Interview types come from `kinds.cards()`, so the count stays true. `video/film.mp4` is no longer on the page (it carries a third-party watermark).
