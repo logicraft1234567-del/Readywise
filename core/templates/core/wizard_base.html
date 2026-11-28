@@ -1,8 +1,8 @@
 {% load static %}<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{% block title %}ReadyWise{% endblock %}</title><link rel="icon" type="image/svg+xml" href="{% static 'img/favicon.svg' %}"><link rel="apple-touch-icon" href="{% static 'img/apple-touch-icon.png' %}">
+<title>{% block title %}ReadyWise{% endblock %}</title><link rel="icon" type="image/svg+xml" href="{% static 'img/mark.svg' %}">
 <script src="{% static 'js/theme.js' %}"></script>
 <link rel="stylesheet" href="{% static 'css/fonts.css' %}">
-<link rel="stylesheet" href="{% static 'css/app.css' %}"><link rel="stylesheet" href="{% static 'css/wizard.css' %}"><link rel="stylesheet" href="{% static 'css/brand.css' %}"><script src="{% static 'vendor/lucide/lucide.min.js' %}"></script><script src="{% static 'js/voice.js' %}" defer></script><script src="{% static 'js/dictate.js' %}" defer></script></head>
+<link rel="stylesheet" href="{% static 'css/app.css' %}"><link rel="stylesheet" href="{% static 'css/wizard.css' %}"><script src="{% static 'vendor/lucide/lucide.min.js' %}"></script><script src="{% static 'js/voice.js' %}" defer></script><script src="{% static 'js/dictate.js' %}" defer></script></head>
 <body class="wz-body">
 <div class="wz" id="wz"><noscript><p style="padding:2rem">Please turn on JavaScript to use the guided set-up, or <a href="{% url 'profile' %}">fill in your profile here</a>.</p></noscript></div>
 <form id="wz-form" method="post" enctype="multipart/form-data" style="display:none">{% csrf_token %}<div id="wz-hidden"></div>{% block files %}{% endblock %}</form>
