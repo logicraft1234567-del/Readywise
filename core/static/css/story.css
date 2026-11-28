@@ -110,3 +110,11 @@
 .three{display:grid;grid-template-columns:repeat(3,1fr);gap:2cqw;width:76cqw;text-align:left}.three .col p{font-size:1.35cqw;color:#D6DDF0;margin:0 0 .8cqh;line-height:1.4}
 .film .cap{font-size:1.6cqw;min-height:0;color:#C7D0E8}
 .film .two .nt{font-size:1.3cqw;padding:1cqw 1.2cqw;margin-bottom:.9cqw}
+
+/* "See story" video dialog: fills the screen on any device, video keeps its 16:9 shape */
+.sv{position:fixed;inset:0;z-index:500;display:grid;place-items:center;padding:max(12px,env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) max(12px,env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px));background:rgba(3,5,10,.94);opacity:0;transition:opacity .2s}
+.sv[hidden]{display:none}.sv.open{opacity:1}
+.sv-box{width:min(100%,calc((100dvh - 24px) * 16 / 9));aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+.sv-box video{width:100%;height:100%;display:block;object-fit:contain;background:#000}
+.sv-x{position:absolute;top:max(10px,env(safe-area-inset-top,0px));right:max(10px,env(safe-area-inset-right,0px));z-index:2;width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(20,26,44,.8);color:#fff;font-size:26px;line-height:1;cursor:pointer}
+@media (max-width:700px){.sv{padding:0}.sv-box{border-radius:0}}

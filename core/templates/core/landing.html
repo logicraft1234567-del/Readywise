@@ -7,7 +7,7 @@
  <div>
   <h1 class="lp-h1 hero-h"><span class="mask"><span class="ln">Walk in</span></span><span class="mask"><span class="ln">already ready.</span></span></h1>
   <p class="lp-lead hero-fade">ReadyWise researches your opportunity, builds the panel that will question you, trains you every day, and shows you exactly what to fix before the real interview.</p>
-  <div class="lp-cta-row hero-fade"><a class="btn solid" href="{% url 'register' %}"><span class="bl">Create my interview workspace</span><span class="bs">Create workspace</span></a><button type="button" class="btn" data-story-open><span class="st-play-badge" aria-hidden="true"></span>See story</button></div>
+  <div class="lp-cta-row hero-fade"><a class="btn solid" href="{% url 'register' %}"><span class="bl">Create my interview workspace</span><span class="bs">Create workspace</span></a><button type="button" class="btn" data-story-open data-src="{% static 'video/story.mp4' %}" data-poster="{% static 'img/story-poster.jpg' %}"><span class="st-play-badge" aria-hidden="true"></span>See story</button></div>
   <p class="lp-fine hero-fade">Ten interview types, from jobs and admissions to visas and investor pitches. Works from your CV and the description you already have.</p>
  </div>
  <div class="hero-frame" aria-label="Example of a practice interview">
@@ -141,14 +141,13 @@
 <form method="post" action="{% url 'contact' %}" class="glass">{% csrf_token %}<label class="l" for="c-name" style="margin-top:0">Name</label><input id="c-name" class="field" name="name" required autocomplete="name"><label class="l" for="c-email">Email</label><input id="c-email" class="field" type="email" name="email" required autocomplete="email"><label class="l" for="c-msg">Message</label><textarea id="c-msg" class="field" rows="4" name="message" required></textarea><button class="btn solid" style="margin-top:1.3rem">Send message</button></form></section>
 
 
-{% include 'core/_film.html' with fid='story' flabel='The ReadyWise story' %}
 {% include 'core/_film.html' with fid='walk' flabel='How to use ReadyWise: a walkthrough' %}
 {% include 'core/_film_team.html' %}
-<script src="{% static 'js/stage.js' %}" defer></script><script src="{% static 'js/film.js' %}"></script><script src="{% static 'js/story.js' %}"></script><script src="{% static 'js/guide-film.js' %}"></script>
+<script src="{% static 'js/stage.js' %}" defer></script><script src="{% static 'js/film.js' %}"></script><script src="{% static 'js/story-video.js' %}" defer></script><script src="{% static 'js/guide-film.js' %}"></script>
 
 <footer class="lp-foot"><div class="wrap"><div class="cols">
  <div><a class="logo" href="{% url 'landing' %}"><img src="{% static 'img/mark.svg' %}" alt="">ReadyWise</a><p style="margin-top:.9rem;color:var(--mut);max-width:34ch;font-size:.92rem">Your personal AI interview department.</p></div>
- <div><h4>Product</h4><ul><li><a href="#how">How it works</a></li><li><a href="#panel">The panel</a></li><li><a href="#features">Features</a></li><li><a href="{% url 'guide' %}">How to use ReadyWise</a></li><li><a href="#guide" data-film-open="walk">Watch the walkthrough</a></li><li><a href="#faq">FAQ</a></li><li><a href="#film">Watch the film</a></li><li><a href="#story" data-story-open>Watch the story</a></li></ul></div>
+ <div><h4>Product</h4><ul><li><a href="#how">How it works</a></li><li><a href="#panel">The panel</a></li><li><a href="#features">Features</a></li><li><a href="{% url 'guide' %}">How to use ReadyWise</a></li><li><a href="#guide" data-film-open="walk">Watch the walkthrough</a></li><li><a href="#faq">FAQ</a></li><li><a href="#film">Watch the film</a></li><li><a href="#story" data-story-open data-src="{% static 'video/story.mp4' %}" data-poster="{% static 'img/story-poster.jpg' %}">Watch the story</a></li></ul></div>
  <div><h4>Account</h4><ul><li><a href="{% url 'login' %}">Log in</a></li><li><a href="{% url 'register' %}">Create an account</a></li><li><a href="#contact">Contact</a></li></ul></div></div>
  <div class="legal"><span>ReadyWise prepares you. It never predicts hiring, admission or visa decisions.</span><a href="#" onclick="sessionStorage.removeItem('rw-intro');location.reload();return false">Replay intro</a></div></div></footer>
 {% endblock %}

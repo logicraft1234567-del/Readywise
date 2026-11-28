@@ -459,7 +459,7 @@ body{overflow-x:clip}
 .nav-burger,.nm,.nm-bg{display:none}
 @media (max-width:760px){
   /* public nav: only the logo mark, Log in and a menu button; the wordmark, theme toggle and Start free live in the menu */
-  .nav .logo-t,.nav .nav-theme,.nav .nav-start{display:none}
+  .nav .nav-theme,.nav .nav-start{display:none}
   .nav .nav-burger{display:grid}
   .nav .nav-login{font-weight:600}
   .nm-bg{display:block;position:fixed;inset:0;z-index:70;background:rgba(10,16,32,.45);opacity:0;transition:opacity .22s}.nm-bg.open{opacity:1}.nm-bg[hidden],.nm[hidden]{display:none}
@@ -471,3 +471,6 @@ body{overflow-x:clip}
 }
 /* signed-in app header on phones: the theme toggle moves to the More sheet so the search bar gets the space */
 @media (max-width:1000px){.hdr button[onclick="toggleTheme()"]{display:none}}
+
+/* phones: Analytics leaves the dashboard header entirely */
+@media (max-width:760px){.hdr .ico-m[href*="analytics"]{display:none}}
