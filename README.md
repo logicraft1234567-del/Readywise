@@ -18,7 +18,7 @@ python manage.py runserver
 Open http://127.0.0.1:8000 . Use Chrome or Edge for voice recognition (typing works everywhere). Camera/mic need localhost or HTTPS.
 
 ## How the agents share data (core/services)
-- `research.run` (`services/research.py`, `services/evidence.py`)  a different research plan per interview type (`services/kinds.py`). Seven searches run side by side: the type's four angles, public posts on TikTok, Instagram, X, LinkedIn, Facebook and Threads (found through web search; TikTok and X captions are read through their public oEmbed endpoints, the other platforms need a login so only the search snippet is used; always treated as candidate-reported, never confirmed), what real candidates report (forums, reviews, Reddit threads, which are fetched and read), and interview videos (YouTube captions are read, summarised with timestamps, and only the notes are kept). A synthesis step writes that type's briefing. Evidence rules are enforced in code: a finding resting on a forum, review or video is never `confirmed`, sources older than three years are flagged and demoted, and the page shows how many separate sources agree and how many videos were actually heard
+- `research.run` (`services/research.py`, `services/evidence.py`)  a different research plan per interview type (`services/kinds.py`). Six searches run side by side: the type's four angles, what real candidates report (forums, reviews, Reddit threads, which are fetched and read), and interview videos (YouTube captions are read, summarised with timestamps, and only the notes are kept). A synthesis step writes that type's briefing. Evidence rules are enforced in code: a finding resting on a forum, review or video is never `confirmed`, sources older than three years are flagged and demoted, and the page shows how many separate sources agree and how many videos were actually heard
 - `agents.prepare`   research + CV + panel + past scores -> `PrepTask` rows
 - `agents.next_turn` Panel Orchestrator: picks the speaker, avoids repeats, tracks covered topics and time, filters memory per interviewer focus
 - `agents.evaluate`  transcript -> scores, timestamped observations
@@ -98,3 +98,17 @@ The interview room uses the interviewer photos (`core/static/img/i01.png` to `i1
 
 ## Films (story and walkthrough)
 `core/static/js/film.js` is the shared engine (GSAP timeline, particles, live Web Audio score, controls). Each film is a config: `story.js` (the 65 second motivational story, `/#story`) and `guide-film.js` (the 11-chapter walkthrough of how to use the site, why the questions matter, why research comes first and how data is handled, `/#walkthrough`). Markup comes from `templates/core/_film.html`; buttons use `data-story-open` or `data-film-open="walk"`. To add a film, add a config file and include `_film.html` with a new id.
+
+## Buttons on small screens
+
+A button label is never clipped on a phone (560px and narrower). Every button has one of three forms:
+
+| Form | Markup | Use when |
+|---|---|---|
+| Full label, then short label | `<span class="bl">Create my interview workspace</span><span class="bs">Create workspace</span>` inside the button | the label is longer than 17 characters |
+| Icon only | add `ico-m` to the button, put the label in `<span class="bl">`, and give the button `aria-label` and `title` | the icon alone is clear (for example Leave room) |
+| Wraps | nothing to add | short labels; `.btn` wraps to two lines and keeps a 44px touch height on phones |
+
+The same pattern covers buttons built in JavaScript: the journey "Next up" button (`.jbtn`, labels in `journey.js` each have a `short`), the planner cards and pop-up, the wizard (`.wz-btn` wraps and its main choices stack full width) and the story film end card (`.st-btn`). When you build a button in JavaScript, write both spans too.
+
+Rules: the short label keeps the same verb as the full one, in sentence case. Both `.btn` and the interview room's `.rm-btn` use the pattern. `tests/test_buttons.py` fails if a label longer than 17 characters has no short form, or an icon-only button has no accessible name.

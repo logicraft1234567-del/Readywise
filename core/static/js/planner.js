@@ -26,7 +26,7 @@
   function linksHTML(t) {
     const L = t.links || {}, a = (x, ic, word) => x ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${ic}<span class="l">${x.found ? `<small>${word}</small> ` : ""}${esc(x.label)}</span></a>` : "";
     let iv = "";
-    if (L.interview) iv = t.can && !t.done ? `<button type="button" class="btn sm solid" data-start="${L.interview.workspace}">${I.flag}<span class="bl">${esc(L.interview.label)}</span><span class="bs">Start</span></button>` : t.done ? "" : `<span class="tk-lock">${I.lock}Interview opens ${esc(t.when)}</span>`;
+    if (L.interview) iv = t.can && !t.done ? `<button type="button" class="btn sm solid" data-start="${L.interview.workspace}">${I.flag}<span class="bl">${esc(L.interview.label)}</span><span class="bs">Start interview</span></button>` : t.done ? "" : `<span class="tk-lock">${I.lock}Interview opens ${esc(t.when)}</span>`;
     return `<div class="tk-links">${a(L.read, I.book, "Read")}${a(L.watch, I.play, "Watch")}${iv}</div>`;
   }
   function taskHTML(t, o = {}) {
@@ -127,7 +127,7 @@
     const tasks = d.items.filter(i => i.task); if (!tasks.length || seenToday()) return; markSeen();
     const moved = tasks.filter(i => i.task.moved).length, pop = $("#rw-pop"); if (!pop) return;
     const title = moved ? `${moved} missed task${moved > 1 ? "s" : ""} moved to today` : `${tasks.length} task${tasks.length > 1 ? "s" : ""} for today`;
-    pop.innerHTML = `<div class="pop-h"><b>${esc(title)}</b><button type="button" class="pop-x" data-pop-close aria-label="Dismiss">${I.x}</button></div><ul>${tasks.slice(0, 3).map(i => `<li data-pop-task="${i.task.id}">${tickBtn(i.task)}<span>${esc(i.task.title)}</span></li>`).join("")}</ul>${tasks.length > 3 ? `<p class="text-sm" style="color:var(--mut);margin-top:.5rem">and ${tasks.length - 3} more</p>` : ""}<div class="pop-a"><button type="button" class="btn sm solid" data-pop-open>See details</button><a class="btn sm" href="/calendar/">Open calendar</a></div>`;
+    pop.innerHTML = `<div class="pop-h"><b>${esc(title)}</b><button type="button" class="pop-x" data-pop-close aria-label="Dismiss">${I.x}</button></div><ul>${tasks.slice(0, 3).map(i => `<li data-pop-task="${i.task.id}">${tickBtn(i.task)}<span>${esc(i.task.title)}</span></li>`).join("")}</ul>${tasks.length > 3 ? `<p class="text-sm" style="color:var(--mut);margin-top:.5rem">and ${tasks.length - 3} more</p>` : ""}<div class="pop-a"><button type="button" class="btn sm solid" data-pop-open>See details</button><a class="btn sm" href="/calendar/"><span class="bl">Open calendar</span><span class="bs">Calendar</span></a></div>`;
     pop.hidden = false;
     try { if ("Notification" in window && Notification.permission === "granted" && document.hidden) new Notification("ReadyWise: " + title, { body: tasks.slice(0, 3).map(i => i.task.title).join("\n") }); } catch (e) { }
   }

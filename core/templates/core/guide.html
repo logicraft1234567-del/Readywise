@@ -3,7 +3,7 @@
 {% block head %}<link rel="stylesheet" href="{% static 'css/landing.css' %}"><link rel="stylesheet" href="{% static 'css/story.css' %}"><script defer src="{% static 'js/guide.js' %}"></script>{% endblock %}
 {% block body %}
 <header class="wrap gd-head"><p class="gd-kicker">Guide</p><h1 class="lp-h1" style="font-size:clamp(2.6rem,5.4vw,4.4rem)">How to use ReadyWise.</h1>
-<p class="lp-lead" style="margin-top:1.3rem">What to do, what ReadyWise asks for and why, why research comes first, and what happens to your data. It takes about ten minutes to read, and five to get started.</p><div class="lp-cta-row"><button type="button" class="btn solid" data-film-open="walk"><span class="st-play-badge" aria-hidden="true" style="color:#fff"></span><span class="bl">Watch the walkthrough</span><span class="bs">Walkthrough</span></button><a class="btn" href="#start"><span class="bl">Read the guide</span><span class="bs">Guide</span></a></div></header>
+<p class="lp-lead" style="margin-top:1.3rem">What to do, what ReadyWise asks for and why, why research comes first, and what happens to your data. It takes about ten minutes to read, and five to get started.</p><div class="lp-cta-row"><button type="button" class="btn solid" data-film-open="walk"><span class="st-play-badge" aria-hidden="true" style="color:#fff"></span><span class="bl">Watch the walkthrough</span><span class="bs">Watch</span></button><a class="btn" href="#start">Read the guide</a></div></header>
 
 <div class="wrap gd">
 <nav class="gd-toc" aria-label="On this page"><ul>
@@ -76,7 +76,7 @@
  <details><summary>The date of my interview changed<i data-lucide="plus" width="20"></i></summary><p>Update the date in your interview workspace, then refresh the research and your plan so the days and priorities match.</p></details>
 </div></section>
 
-<section class="gd-cta"><h2>Ready to try it?</h2><p>Set up your first workspace in about a minute.</p><div class="lp-cta-row"><a class="btn solid" href="{% url 'register' %}"><span class="bl">Create my interview workspace</span><span class="bs">Get started</span></a><button type="button" class="btn" data-film-open="walk"><span class="bl">Watch the walkthrough</span><span class="bs">Walkthrough</span></button></div></section>
+<section class="gd-cta"><h2>Ready to try it?</h2><p>Set up your first workspace in about a minute.</p><div class="lp-cta-row"><a class="btn solid" href="{% url 'register' %}"><span class="bl">Create my interview workspace</span><span class="bs">Create workspace</span></a><button type="button" class="btn" data-film-open="walk"><span class="bl">Watch the walkthrough</span><span class="bs">Watch</span></button></div></section>
 </div></div>
 {% include 'core/_film.html' with fid='walk' flabel='How to use ReadyWise: a walkthrough' %}
 {% include 'core/_film_team.html' %}

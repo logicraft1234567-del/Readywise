@@ -159,6 +159,3 @@
 
 /* the bottom tab bar sits under these on phones */
 @media(max-width:1000px){.pop{bottom:calc(var(--tab-h,64px) + env(safe-area-inset-bottom,0px) + .75rem);right:.75rem;left:.75rem;width:auto}body:has(#ws-foot) .pop{bottom:calc(var(--tab-h,64px) + env(safe-area-inset-bottom,0px) + 9rem)}}
-
-.np-link .bs{display:none}
-@media(max-width:640px){.np-link .bl{display:none}.np-link .bs{display:inline}.np-h{gap:.6rem}.np-link{text-align:right}}

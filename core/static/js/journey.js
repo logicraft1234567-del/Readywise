@@ -30,11 +30,11 @@
   function cta(id) {
     const i = idxOf(id), nx = order[i + 1];
     switch (id) {
-      case "research": return D.researched ? { label: "Continue to the panel", short: "Meet the panel", mid: "Research is done. Now meet the people you'll face.", run: () => connect(id, nx) } : { label: "Run research", short: "Research", mid: "About two minutes: I read the web, forums, videos and social media for you.", run: b => window.rsStart && window.rsStart(b) };
+      case "research": return D.researched ? { label: "Continue to the panel", short: "Meet the panel", mid: "Research is done. Now meet the people you'll face.", run: () => connect(id, nx) } : { label: "Run research", short: "Research", mid: "About two minutes: I read the web, forums and videos for you.", run: b => window.rsStart && window.rsStart(b) };
       case "panel": return { label: "Looks good, build my plan", short: "Build my plan", mid: D.panel.length ? "Your panel: " + D.panel.join(", ") : "Your interviewers are chosen for you.", run: () => connect(id, nx) };
-      case "plan": return D.has_tasks ? { label: "Start practising", short: "Practise", mid: "Tick tasks as you go. The plan adapts to your results.", run: () => connect(id, nx) } : { label: "Generate my plan", short: "Make plan", mid: "A day-by-day plan from your research and panel.", run: b => window.act && act(b, D.plan_url) };
+      case "plan": return D.has_tasks ? { label: "Start practising", short: "Practise", mid: "Tick tasks as you go. The plan adapts to your results.", run: () => connect(id, nx) } : { label: "Generate my plan", short: "Make my plan", mid: "A day-by-day plan from your research and panel.", run: b => window.act && act(b, D.plan_url) };
       case "interview": return { label: "Enter the interview room", short: "Enter room", mid: "Camera and mic on. Take a breath, then go.", run: () => { const f = $("#interview form"); f && (f.requestSubmit ? f.requestSubmit() : f.submit()); } };
-      default: return { label: "Practise again", short: "Again", mid: "Every session sharpens these scores.", run: () => connect(id, "interview") };
+      default: return { label: "Practise again", short: "Practise", mid: "Every session sharpens these scores.", run: () => connect(id, "interview") };
     }
   }
   function drawDots(id) {
@@ -42,9 +42,9 @@
   }
   function updateBar(id) {
     const c = cta(id); const i = idxOf(id);
-    let lbl = $("#ft-lbl"); if (!lbl) { go.innerHTML = '<span class="lbl" id="ft-lbl"></span><span class="ar" aria-hidden="true">\u2192</span>'; lbl = $("#ft-lbl"); }
-    if (lbl.dataset.full !== c.label) { go.classList.remove("swap"); void go.offsetWidth; go.classList.add("swap"); }
-    lbl.dataset.full = c.label; lbl.innerHTML = '<span class="bl"></span><span class="bs"></span>'; lbl.firstChild.textContent = c.label; lbl.lastChild.textContent = c.short || c.label; go.setAttribute("aria-label", c.label); mid.textContent = `Step ${i + 1} of ${n}. ${c.mid}`; back.hidden = i === 0; go.onclick = e => { if (go.dataset.shattering) return; window.rwShatter && rwShatter(go, { event: e, restoreAfter: 950 }); setTimeout(() => c.run(go), 230); }; drawDots(id);
+    let lbl = $("#ft-lbl"); if (!lbl) { go.innerHTML = '<span class="lbl" id="ft-lbl"><span class="bl"></span><span class="bs"></span></span><span class="ar" aria-hidden="true">\u2192</span>'; lbl = $("#ft-lbl"); }
+    if (lbl.firstChild.textContent !== c.label) { go.classList.remove("swap"); void go.offsetWidth; go.classList.add("swap"); }
+    lbl.firstChild.textContent = c.label; lbl.lastChild.textContent = c.short || c.label; go.setAttribute("aria-label", c.label); mid.textContent = `Step ${i + 1} of ${n}. ${c.mid}`; back.hidden = i === 0; go.onclick = e => { if (go.dataset.shattering) return; window.rwShatter && rwShatter(go, { event: e, restoreAfter: 950 }); setTimeout(() => c.run(go), 230); }; drawDots(id);
   }
   back.onclick = () => { const i = idxOf(cur); if (i > 0) show(order[i - 1]); };
 

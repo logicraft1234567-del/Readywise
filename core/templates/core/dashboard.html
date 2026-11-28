@@ -5,7 +5,7 @@
 {% if not profile.cv_text %}<div class="nudge" style="cursor:default"><i data-lucide="file-up" width="18" style="color:var(--b1)"></i><span class="text-sm">Add your CV so interviewers can ask about your real experience.</span><a class="btn sm ml-auto" href="{% url 'profile' %}">Add CV</a></div>{% endif %}
 
 <div class="pg-head dx-head"><div><h1>{{ hello }}, {{ display_name }}.</h1><p>{% if stats.due %}You have <a href="{% url 'tasks' %}" style="color:var(--b1);font-weight:600">{{ stats.due }} task{{ stats.due|pluralize }}</a> to do today.{% else %}Nothing is overdue. Pick what to practise next.{% endif %}</p></div>
-<a class="btn solid" href="{% url 'ws_new' %}"><i data-lucide="plus" width="16"></i><span class="bl">New interview</span><span class="bs">New</span></a></div>
+<a class="btn solid" href="{% url 'ws_new' %}"><i data-lucide="plus" width="16"></i>New interview</a></div>
 
 {% if focus %}
 <section class="glass dx-next" aria-label="Your next interview">
@@ -24,7 +24,7 @@
     <a class="btn solid" href="{% url 'ws' focus.w.pk %}">Continue<i data-lucide="arrow-right" width="15"></i></a></div>
 </section>
 {% else %}
-<section class="glass dx-next dx-empty"><div><img src="{% static 'img/mark.svg' %}" width="32" alt=""><h2>Start your first interview</h2><p>Tell ReadyWise what you are preparing for. It builds your plan and picks the interviewers.</p><a class="btn solid" href="{% url 'ws_new' %}"><i data-lucide="plus" width="16"></i><span class="bl">New interview</span><span class="bs">New</span></a></div></section>
+<section class="glass dx-next dx-empty"><div><img src="{% static 'img/mark.svg' %}" width="32" alt=""><h2>Start your first interview</h2><p>Tell ReadyWise what you are preparing for. It builds your plan and picks the interviewers.</p><a class="btn solid" href="{% url 'ws_new' %}"><i data-lucide="plus" width="16"></i>New interview</a></div></section>
 {% endif %}
 
 <div class="strip dx-strip">

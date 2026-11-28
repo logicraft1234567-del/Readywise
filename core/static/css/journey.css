@@ -44,7 +44,8 @@
 .jbtn{position:relative;overflow:hidden;isolation:isolate;border:1px solid var(--b1);font:600 .95rem/1.2 var(--ui);color:var(--on-b1);background:var(--b1);cursor:pointer;display:inline-flex;align-items:center;gap:.6rem;padding:.8rem 1.4rem;border-radius:var(--r2);white-space:nowrap;transition:color .35s,border-color .35s,transform .15s}
 .jbtn::before{content:"";position:absolute;left:-8%;width:116%;height:150%;top:104%;z-index:-1;background:var(--fill-bg);border-radius:50% 50% 0 0/26% 26% 0 0;transition:top .6s cubic-bezier(.2,.8,.2,1)}
 .jbtn:hover::before,.jbtn:focus-visible::before{top:-14%}.jbtn:hover,.jbtn:focus-visible{color:var(--fill-fg);border-color:var(--fill-bg)}.jbtn:active{transform:translateY(1px)}
-.jbtn .ar{display:inline-block;transition:transform .25s}.jbtn:hover .ar{transform:translateX(4px)}
+.jbtn .ar{display:inline-block;transition:transform .25s}.jbtn{max-width:100%}.jbtn .bs{display:none}
+@media(max-width:560px){.jbtn{white-space:normal;min-height:44px;text-align:center}.jbtn .bl{display:none}.jbtn .bs{display:inline}}   /* the Next up button: short label on phones */.jbtn:hover .ar{transform:translateX(4px)}
 .jbtn.busy{opacity:.7;pointer-events:none}
 .jbtn.swap .lbl{animation:lblswap .4s}@keyframes lblswap{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .fly{position:fixed;left:0;top:0;will-change:transform;z-index:60;width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;pointer-events:none;background:var(--b1);box-shadow:0 0 0 6px var(--soft)}
@@ -63,12 +64,3 @@ body:has(#ws-foot) .pop{bottom:6.4rem}
 @media (max-width:760px){body:has(#ws-foot) .pop{bottom:10.5rem}}
 
 @media(max-width:1000px){.ws-foot{bottom:calc(var(--tab-h,64px) + env(safe-area-inset-bottom,0px))}}
-
-/* footer button: full label on desktop, short on phones */
-.jbtn .bs{display:none}
-@media (max-width:760px){
-  .jbtn{min-width:0;padding:.75rem 1rem}
-  .jbtn .bl{display:none}.jbtn .bs{display:inline}
-  .ft-back{padding:.6rem .7rem}
-}
-@media (max-width:380px){.ft-back{font-size:.85rem}.jbtn{gap:.4rem;padding:.7rem .8rem}}

@@ -397,10 +397,10 @@ def form_sections(kind):
         if fs: out.append({"title": title, "fields": fs})
     return out
 
-EVIDENCE_STEPS = ["Experiences and reviews from people who did this", "Interview videos and transcripts", "TikTok, Instagram, X and other social posts"]
+EVIDENCE_STEPS = ["Experiences and reviews from people who did this", "Interview videos and transcripts"]
 
 def research_steps(kind):
-    """Labels shown while researching: the type's own angles, then forums, videos and social media, then the two closing steps every type has."""
+    """Labels shown while researching: the type's own angles, then forums and videos, then the two closing steps every type has."""
     return [p["label"] for p in profile(kind)["plan"]] + EVIDENCE_STEPS + ["Writing your briefing", "Choosing your interviewers"]
 
 

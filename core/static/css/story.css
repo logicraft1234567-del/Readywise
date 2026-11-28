@@ -41,6 +41,9 @@
 .nt b{color:#8E9DFF;font-size:1.25cqw;margin-right:.8cqw;font-variant-numeric:tabular-nums}
 .nt.better{border-left:.3cqw solid #8E9DFF;border-radius:0 .9cqw .9cqw 0}
 .st-btn{display:inline-flex;align-items:center;gap:.6cqw;padding:1.3cqw 2.4cqw;border-radius:.9cqw;font:600 1.6cqw var(--ui);border:1px solid rgba(255,255,255,.28);color:#fff;background:transparent;cursor:pointer;text-decoration:none;transition:background .25s,color .25s}
+.st-btn .bs{display:none}
+@media(max-width:700px){.st-btn{font-size:max(1.6cqw,.82rem);padding:max(1.3cqw,.6rem) max(2.4cqw,1rem);border-radius:max(.9cqw,8px);gap:.4rem}.st-row{flex-wrap:wrap;gap:max(1.2cqw,.5rem)}}   /* the film's end-card buttons keep a readable size on phones, where cqw shrinks them to about 6px */
+@media(max-width:560px){.st-btn .bl{display:none}.st-btn .bs{display:inline}}
 .st-btn.pri{background:#fff;color:#0B1120;border-color:#fff}.st-btn:hover{background:#2B44E8;border-color:#2B44E8;color:#fff}
 .st-row{display:flex;gap:1.2cqw;justify-content:center;margin-top:1cqh;opacity:0}
 .st-ui{position:absolute;left:0;right:0;bottom:2.2vh;z-index:5;display:flex;justify-content:center;align-items:center;gap:.8rem;padding:0 1rem}
@@ -107,11 +110,3 @@
 .three{display:grid;grid-template-columns:repeat(3,1fr);gap:2cqw;width:76cqw;text-align:left}.three .col p{font-size:1.35cqw;color:#D6DDF0;margin:0 0 .8cqh;line-height:1.4}
 .film .cap{font-size:1.6cqw;min-height:0;color:#C7D0E8}
 .film .two .nt{font-size:1.3cqw;padding:1cqw 1.2cqw;margin-bottom:.9cqw}
-
-/* film end-card buttons: keep them readable on a portrait phone, where cqw units get tiny */
-.st-btn .bs{display:none}
-@media (max-aspect-ratio:1/1){
-  .st-btn{font-size:max(1.6cqw,.9rem);padding:max(1.3cqw,.65rem) max(2.4cqw,1.1rem);border-radius:max(.9cqw,.5rem);white-space:nowrap}
-  .st-btn .bl{display:none}.st-btn .bs{display:inline}
-  .st-row{flex-wrap:wrap;gap:.6rem}
-}

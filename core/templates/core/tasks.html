@@ -8,7 +8,7 @@
   <section aria-labelledby="h-later"><div class="sec-title"><h2 id="h-later">Coming up</h2><span id="c-later"></span></div><div id="l-later"></div></section>
   <details class="glass rp-d tk-done" id="d-done"><summary>Completed <span id="c-done" style="color:var(--mut);font-weight:400;margin-left:.4rem"></span></summary><div id="l-done" class="grid gap-2"></div></details>
 </div>
-{% else %}<div class="glass pg-empty" style="margin-top:1.25rem;min-height:220px"><div><b>No tasks yet</b>Open an interview and generate its plan. Your daily tasks will appear here.<br><a class="btn solid" style="margin-top:.8rem" href="{% url 'ws_new' %}"><span class="bl">New interview</span><span class="bs">New</span></a></div></div>{% endif %}
+{% else %}<div class="glass pg-empty" style="margin-top:1.25rem;min-height:220px"><div><b>No tasks yet</b>Open an interview and generate its plan. Your daily tasks will appear here.<br><a class="btn solid" style="margin-top:.8rem" href="{% url 'ws_new' %}">New interview</a></div></div>{% endif %}
 {{ tasks_json|json_script:"tasks-data" }}
 <script>document.addEventListener("DOMContentLoaded",()=>{
   const el=document.getElementById("tasks-data"); if(!el)return; const ALL=JSON.parse(el.textContent),E=RW.esc,$=id=>document.getElementById(id); ALL.forEach(t=>RW.store[t.id]=t);
