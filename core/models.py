@@ -43,6 +43,7 @@ class Workspace(models.Model):
     research = models.JSONField(default=dict, blank=True); sources = models.JSONField(default=list, blank=True)
     researched_at = models.DateTimeField(null=True, blank=True)
     job_state = models.CharField(max_length=10, default="idle"); job_error = models.TextField(blank=True); job_progress = models.JSONField(default=dict, blank=True)
+    identity = models.JSONField(default=dict, blank=True)   # the identity profile of the company or project being discussed (services/identity.py); research is only attached to an entity that matches it
     research_cache = models.JSONField(default=dict, blank=True)   # notes of the research angles already finished, so a run that hit a rate limit resumes instead of starting over
     docs_plan = models.JSONField(default=list, blank=True)   # documents the quick check in the new-interview flow found; the full research later adds to or replaces them
     details = models.JSONField(default=dict, blank=True); documents = models.JSONField(default=dict, blank=True); allocation = models.JSONField(default=dict, blank=True); known_interviewers = models.TextField(blank=True)
@@ -58,6 +59,8 @@ class Finding(models.Model):
     claim = models.TextField(); kind = models.CharField(max_length=24, default="inferred")  # confirmed / candidate_reported / inferred
     confidence = models.CharField(max_length=12, default="medium"); relevance = models.CharField(max_length=200, blank=True)
     source_hint = models.CharField(max_length=300, blank=True); source_date = models.CharField(max_length=40, blank=True)
+    classification = models.CharField(max_length=24, default="unverified"); source_url = models.CharField(max_length=400, blank=True); source_title = models.CharField(max_length=200, blank=True)
+    entity = models.CharField(max_length=160, blank=True)   # which company or project the source is about; a finding about another entity is "wrong_entity"
     retrieved = models.DateField(auto_now_add=True)
 
 class PrepTask(models.Model):
@@ -90,6 +93,7 @@ class Turn(models.Model):
     role = models.CharField(max_length=12, default="interviewer"); text = models.TextField()
     topic = models.CharField(max_length=120, blank=True); followup = models.BooleanField(default=False)
     offset = models.PositiveIntegerField(default=0); created = models.DateTimeField(auto_now_add=True)
+    asr = models.JSONField(default=dict, blank=True)  # speech-recognition quality of this candidate answer (services/transcript.py): {reliable, confidence, issues, language}; unreliable words are never scored
     factcheck = models.JSONField(default=dict, blank=True)  # online fact-check of this candidate answer: {"claims": [{claim, verdict, truth, source}]}
 
 class Evaluation(models.Model):

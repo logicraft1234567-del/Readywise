@@ -5,6 +5,7 @@ The audio itself travels browser <-> Google. Transcripts come back through room_
 import datetime, hashlib, itertools
 from django.conf import settings
 from . import agents
+from . import transcript as tsq
 
 _turn = itertools.count()   # hands each new interview the next key, so several live interviews at once spread over all the keys
 
@@ -52,7 +53,7 @@ def begin_rule(iv, panel, first):
     return "- Do not speak until a message starting with YOUR TURN arrives. The first time you have the floor, say who you are and your role in ONE short sentence, then react to the candidate's last answer and ask your first question."
 
 def instruction(sess, iv=None):
-    ws = sess.workspace; panel = panel_of(sess); iv = iv or panel[0]; solo = len(panel) == 1; p = agents.profile_of(ws.user); lang = p.language or "English"; first = (p.full_name or "").split(" ")[0]
+    ws = sess.workspace; panel = panel_of(sess); iv = iv or panel[0]; solo = len(panel) == 1; p = agents.profile_of(ws.user); lang = agents.session_language(sess); first = (p.full_name or "").split(" ")[0]
     if not sess.agenda: agents.build_agenda(sess, panel)   # the whole panel shares one plan; each interviewer owns some areas
     style = {"friendly": "warm and encouraging, gives the candidate room", "strict": "formal, exacting and brisk", "balanced": "professional and even-handed"}.get(p.style, "professional")
     return f"""You are {iv.name}, {iv.position}, running a REAL live voice interview. You are speaking out loud with the candidate over a video call.
@@ -63,7 +64,7 @@ Question themes (inspiration only, adapt, never read out): {iv.question_bank.rep
 ROLE LENS: {agents.role_lens(ws)}
 INTERVIEW BRIEF: {agents._brief(ws, 1400)}
 {agents.past_context(sess, 14)}INTERVIEW TYPE GUIDE: {agents.kinds.profile(ws.kind)['guide']}
-DIFFICULTY (set by the system): {ws.difficulty}. The candidate prefers a {style} interviewer. Never be abusive or humiliating. Conduct the whole interview in {lang}.
+DIFFICULTY (set by the system): {ws.difficulty}. The candidate prefers a {style} interviewer. Never be abusive or humiliating. Conduct the whole interview in {lang}. The candidate speaks {lang} for the whole interview: understand and transcribe their speech as {lang} only, and if a sound is unclear ask them to repeat it rather than guessing words in another language.
 {agents.CONDUCT}
 HOW TO SPEAK ON THE CALL:
 - You hear the candidate's real voice directly. Respond to what they actually said, with something concrete from it (a claim, number, tool, decision or gap). If you could not make out the words, say so briefly and ask them to repeat; never guess.
@@ -96,7 +97,7 @@ def mint(sess, only=None):
     for n, (iv, voice) in enumerate(zip(panel, voices)):
         if only is not None and iv.id != only: continue
         cfg = {"response_modalities": ["AUDIO"], "system_instruction": instruction(sess, iv),
-               "speech_config": {"voice_config": {"prebuilt_voice_config": {"voice_name": voice}}},
+               "speech_config": {"voice_config": {"prebuilt_voice_config": {"voice_name": voice}}, "language_code": tsq.BCP47.get(agents.session_language(sess), "en-US")},   # the interview's language is fixed: without it the transcription auto-detects per fragment and printed English speech as Vietnamese or German
                "input_audio_transcription": {}, "output_audio_transcription": {},   # transcripts are for the interview record; the model itself hears the audio
                "session_resumption": {}, "context_window_compression": {"sliding_window": {}}, "tools": _tools([i for i in panel if i.id != iv.id])}
         tok = None; err = None

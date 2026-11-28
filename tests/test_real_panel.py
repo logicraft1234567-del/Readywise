@@ -29,13 +29,13 @@ def test_research_size_wins_over_candidate_choice(ws):
 
 def test_fallback_score_out_of_100():
     w = {"technical": 5, "communication": 5}
-    assert agents.final_score(80, {"technical": 80, "communication": 80}, w, 8, 8, 0, 0) == 80
-    assert agents.final_score(80, {"technical": 80}, w, 2, 8, 0, 0) <= 40            # most questions unanswered: capped
-    assert agents.final_score(80, {"technical": 80}, w, 8, 8, 2, 1) == 80 - 13        # facts found wrong cost points
-    assert agents.final_score(None, {}, w, 0, 0, 0, 0) == 0
-    assert agents.final_score(30, {"technical": 30}, w, 8, 8, 0, 0) == 30             # no artificial floor: a weak performance is scored as weak
-    assert agents.final_score(99, {"technical": 99}, w, 8, 8, 0, 0) == 98             # the very top of the scale is almost never reached
-    assert agents.final_score(75, {"technical": 75}, w, 3, 8, 0, 0) == 60             # many questions skipped: held at 60
+    assert agents.final_score(80, {"technical": 80, "communication": 80}, w, 8, 8) == 80
+    assert agents.final_score(80, {"technical": 80}, w, 2, 8) <= 40            # most questions unanswered: capped
+    assert agents.final_score(80, {"technical": 80}, w, 8, 8, 6) == 80 - 6          # a documented verified penalty costs points
+    assert agents.final_score(None, {}, w, 0, 0) == 0
+    assert agents.final_score(30, {"technical": 30}, w, 8, 8) == 30             # no artificial floor: a weak performance is scored as weak
+    assert agents.final_score(99, {"technical": 99}, w, 8, 8) == 98             # the very top of the scale is almost never reached
+    assert agents.final_score(75, {"technical": 75}, w, 3, 8) == 60             # many questions skipped: held at 60
     assert agents.verdict_for(88) == "Outstanding" and agents.verdict_for(30) == "Not ready"
 
 def test_factcheck_parses_and_downgrades(monkeypatch, ws):

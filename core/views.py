@@ -13,6 +13,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 from .models import *
 from .services import team, agents, ai, logic, docs, tts, stt, storage, kinds, panelplan, langs, wizard, factcheck, planner, live
+from .services import transcript as tsq, findings as fnd
 from . import jobs
 
 AVATARS = ["img/i06.png","img/i07.png","img/i08.png","img/i09.png","img/i10.png","img/i11.png","img/i12.png","img/i13.png","img/i19.png"]
@@ -517,7 +518,7 @@ def room(request, pk):
     s = mine(Session, request, pk); prof = agents.profile_of(request.user)
     if not s.workspace.panel.exists(): panelplan.allocate(s.workspace)   # ReadyWise, not the candidate, decides who is on the panel
     cands = agents.session_panel(s)
-    return render(request, "core/room.html", {"doc_list": agents.doc_checklist(s.workspace), "s": s, "ws": s.workspace, "panel": cands, "limit": LIMITS.get(s.mode, 0), "rec_lang": langs.code(prof.language), "lang": prof.language,
+    return render(request, "core/room.html", {"doc_list": agents.doc_checklist(s.workspace), "s": s, "ws": s.workspace, "panel": cands, "limit": LIMITS.get(s.mode, 0), "rec_lang": langs.code(agents.session_language(s)), "lang": agents.session_language(s),
         "panel_json": json.dumps([_iv(i) for i in cands])})
 
 @login_required
@@ -539,7 +540,11 @@ def room_stt(request, pk):
     if not f: return JsonResponse({"error": "No audio was received."}, status=400)
     ws = s.workspace   # vocabulary only: an instruction-like prompt ("Job interview answer. Role: ...") leaks into the transcript as words the candidate never said
     hint = ", ".join(x for x in (ws.company, ws.position, (agents.profile_of(ws.user).skills or "")[:160]) if x)
-    r = stt.transcribe(f.read(), f.content_type or "audio/webm", langs.code(agents.profile_of(ws.user).language), hint)
+    lang = agents.session_language(s)   # the interview's language, fixed for the whole session: recognition is never left to guess it
+    r = stt.transcribe(f.read(), f.content_type or "audio/webm", langs.code(lang), hint)
+    if r.get("heard") and r.get("reliable") is False:   # words in the wrong language or with low confidence are not an answer: nothing is saved or scored; the room asks the candidate to repeat or type
+        return JsonResponse({"text": "", "heard": False, "reason": "unreliable", "reliable": False, "confidence": r.get("confidence", 0), "issues": r.get("issues", []),
+                             "message": "I could not capture that clearly. Please say it again, or type your answer."})
     return JsonResponse(r)
 
 @login_required
@@ -554,8 +559,10 @@ def room_turn(request, pk):
     if d.get("answer") is not None:
         tag = {"interrupted": "[interrupting the interviewer] ", "build": agents.BUILD_TAG, "cut_off": "[the panel stopped the candidate because the answer ran long] "}.get(d.get("tag"), "")
         if s.status != "open": return JsonResponse({"error": "This interview has ended."}, status=400)
-        cand = Turn.objects.create(session=s, role="candidate", text=(tag + (d["answer"].strip() or "(no answer given)"))[:9000 if d.get("tag") == "build" else 3000], offset=elapsed)
-        if d.get("tag") != "build" and factcheck.worth_checking(cand.text):   # the dedicated fact-check key looks up what was just claimed; the panel hears the result before its next question
+        body = (tag + (d["answer"].strip() or "(no answer given)"))[:9000 if d.get("tag") == "build" else 3000]
+        asr = {} if d.get("tag") == "build" or not d["answer"].strip() else tsq.assess(d["answer"], agents.session_language(s))   # recorded with the turn; unreliable words are excluded from the evaluation
+        cand = Turn.objects.create(session=s, role="candidate", text=body, offset=elapsed, asr=asr)
+        if d.get("tag") != "build" and tsq.usable(asr) and factcheck.worth_checking(cand.text):   # the dedicated fact-check key looks up what was just claimed; the panel hears the result before its next question
             lastq = s.turns.filter(role="interviewer").order_by("-id").first(); factcheck.start(cand, lastq.text if lastq else "")
     t, end, intro = agents.next_turn(s, elapsed)
     if end:   # the interview is over: the evaluation starts now, while the closing words are still being spoken, so the report is ready almost at once
@@ -656,7 +663,17 @@ def report(request, pk):
         rp["band"] = "warn" if ev.overall is None else "ok" if ev.overall >= 70 else "warn" if ev.overall >= 55 else "bad"
     wt = kinds.profile(s.workspace.kind)["weights"]   # a skill this type of interview barely weighs (technical for a visa interview) is not shown
     skills = [{"label": l, "score": ev.scores.get(c)} for c, l in CATS if ev and isinstance(ev.scores.get(c), (int, float)) and wt.get(c, 5) >= 3]
-    return render(request, "core/report.html", {"s": s, "ws": s.workspace, "ev": ev, "rp": rp, "skills": skills, "turns": s.turns.select_related("speaker")})
+    checks = [fnd.migrate_legacy(c) for c in (ev.checks if ev else []) if isinstance(c, dict)]
+    bd = (ev.breakdown or {}) if ev else {}
+    ctx_ = {"s": s, "ws": s.workspace, "ev": ev, "rp": rp, "skills": skills, "turns": s.turns.select_related("speaker"),
+            "verified_false": [c for c in checks if c["classification"] == fnd.VERIFIED_FALSE and c.get("penalty_eligible")],   # the only external findings that can cost points
+            "research_checks": [c for c in checks if not (c["classification"] == fnd.VERIFIED_FALSE and c.get("penalty_eligible"))],   # shown separately: never part of the performance score
+            "dims_assessed": [d for d in bd.get("dimensions", []) if d.get("weight") and d.get("assessed")], "dims_unassessed": [d for d in bd.get("dimensions", []) if d.get("weight") and not d.get("assessed")],
+            "crit_met": [c for c in bd.get("critical", {}).get("items", []) if c["status"] == "met"], "crit_not_met": [c for c in bd.get("critical", {}).get("items", []) if c["status"] == "not_met"],
+            "crit_na": [c for c in bd.get("critical", {}).get("items", []) if c["status"] == "not_assessed"],
+            "strong": [c for c in (ev.competencies if ev else []) if isinstance(c, dict) and c.get("score") is not None and c["score"] >= 70],
+            "weak": [c for c in (ev.competencies if ev else []) if isinstance(c, dict) and c.get("score") is not None and c["score"] < 55 and c.get("rating") in ("not_demonstrated", "partial")]}
+    return render(request, "core/report.html", ctx_)
 
 # ---------- interviewer marketplace ----------
 @login_required
@@ -705,8 +722,10 @@ def room_live_turns(request, pk):
         cand = t.get("role") == "candidate"; build = cand and bool(t.get("build"))
         text = (agents.BUILD_TAG + str(t.get("text", "")).strip())[:9000] if build else " ".join(str(t.get("text", "")).split())[:3000]
         if not text.strip() or text == agents.BUILD_TAG: continue
-        turn = Turn.objects.create(session=s, speaker=None if cand else panel.get(t.get("speaker"), lead), role="candidate" if cand else "interviewer", text=text, offset=elapsed); saved += 1
-        if cand and not build and factcheck.worth_checking(turn.text):
+        if cand and not build and tsq.is_duplicate_turn(text, [x.text for x in s.turns.filter(role="candidate").order_by("-id")[:3]][::-1]): continue   # the same fragment sent twice
+        asr = tsq.assess(text, agents.session_language(s)) if (cand and not build) else {}   # live transcription auto-detected languages before; every candidate turn is now checked against the interview's language
+        turn = Turn.objects.create(session=s, speaker=None if cand else panel.get(t.get("speaker"), lead), role="candidate" if cand else "interviewer", text=text, offset=elapsed, asr=asr); saved += 1
+        if cand and not build and tsq.usable(asr) and factcheck.worth_checking(turn.text):
             lastq = s.turns.filter(role="interviewer").order_by("-id").first()
             try: factcheck.start(turn, lastq.text if lastq else "")
             except Exception: pass

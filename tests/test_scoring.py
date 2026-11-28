@@ -69,7 +69,7 @@ def test_clean_competencies_calculates_the_score_from_criteria_not_from_the_eval
 def test_rating_and_score_must_agree():
     rub = [{"key": "a", "name": "A", "weight": 5}]
     mk = lambda rating, score: agents.clean_competencies([{"key": "a", "rating": rating, "score": score, "evidence": ["e"]}], rub)[0]["score"]
-    assert mk("demonstrated", 30) == 65 and mk("not_demonstrated", 90) == 45 and mk("partial", 95) == 74
+    assert mk("demonstrated", 30) == 30 and mk("not_demonstrated", 90) == 90 and mk("partial", 95) == 95   # the score is never moved to suit the rating (no floors or ceilings)
 
 
 def test_missing_evidence_is_not_a_low_score():
@@ -102,7 +102,7 @@ E80 = dict(technical=80, reasoning=80, execution=80, communication=80, judgment=
 def test_wrong_facts_and_unanswered_questions_are_penalised_with_evidence():
     base = scoring.compute(six("employment", **E80), "employment", 8, 8)
     assert base["overall"] == 80
-    assert scoring.compute(six("employment", **E80), "employment", 8, 8, 2, 1)["overall"] == 67
+    assert scoring.compute(six("employment", **E80), "employment", 8, 8, {"items": [{"points": 4}], "total": 4})["overall"] == 76   # only a documented, verified penalty deducts
     capped = scoring.compute(six("employment", **E80), "employment", 2, 8)
     assert capped["overall"] == 40 and capped["capped_at"] == 40
     assert scoring.compute(six("employment", **E100), "employment", 8, 8)["overall"] == 98
@@ -140,7 +140,7 @@ def test_report_shows_how_the_score_was_built_and_older_reports_still_render(cli
     bd = scoring.compute(cs, "employment", 8, 8)
     Evaluation.objects.create(session=s, overall=bd["overall"], verdict="Weak", summary="Ok.", breakdown=bd)
     h = client.get(f"/report/{s.pk}/").content.decode()
-    assert "How your score was built" in h and "Evidence confidence" in h and "Critical requirements met: 0 of 1" in h and "not yet demonstrated" in h and "Technical or domain competence" in h
+    assert "How your score was built" in h and "Evidence confidence" in h and "Critical requirements demonstrated: 0 of 1" in h and "Not demonstrated" in h and "Technical" in h
     assert "not a prediction of a real hiring decision" in h
     none = Session.objects.create(workspace=ws, status="done"); Evaluation.objects.create(session=none, overall=None, verdict="Inconclusive", summary="Nothing.")
     h = client.get(f"/report/{none.pk}/").content.decode(); assert "Inconclusive" in h and "How your score was built" not in h

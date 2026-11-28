@@ -93,12 +93,15 @@ function buildStage() {
     d.innerHTML = `<img class="photo" src="${esc(p.image)}" alt=""><div class="rm-bars"><i></i><i></i><i></i><i></i><i></i></div><div class="rm-plate"><div class="who"><b>${esc(p.name)}</b><small>${esc(p.position)}</small></div><span class="rm-state">Listening</span></div>`;
     st.appendChild(d); });
 }
-/* Everyone in the room, the interviewers and you, sits in an equal square, like a video call. The size is the biggest square that fits all of them in the space available. */
+/* Everyone in the room, the interviewers and you, sits in an equal square, like a video call: never more than 2 across, and as large as the screen allows so the squares fill it.
+   On a phone (a narrow or short screen) the same rule shrinks the squares until everyone is visible at once; the name plates simplify when a square gets small. */
 function layoutSquares() {
   const a = document.querySelector(".rm-arena"); if (!a) return; const host = a.parentElement, cs = getComputedStyle(host);
-  const n = PANEL.length + 1, gap = 12, W = host.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight), H = a.clientHeight; if (W <= 0 || !H) return;
-  let best = 80, cols = n; for (let c = 1; c <= n; c++) { const r = Math.ceil(n / c), s = Math.min((W - gap * (c - 1)) / c, (H - gap * (r - 1)) / r); if (s > best + 1) { best = s; cols = c; } }
-  a.style.setProperty("--sq", Math.floor(Math.min(best, 440)) + "px"); a.style.setProperty("--cols", cols);   // the grid is exactly as wide as its columns, so the squares form clean rows
+  const n = PANEL.length + 1, gap = innerWidth <= 900 ? 8 : 12, W = host.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight), H = a.clientHeight; if (W <= 0 || !H) return;
+  let best = 0, cols = Math.min(2, n);
+  for (let c = 1; c <= Math.min(2, n); c++) { const r = Math.ceil(n / c), s = Math.min((W - gap * (c - 1)) / c, (H - gap * (r - 1)) / r); if (s > best + 1) { best = s; cols = c; } }   // at most 2 columns
+  const sq = Math.max(56, Math.floor(Math.min(best, 900)));
+  a.style.setProperty("--sq", sq + "px"); a.style.setProperty("--cols", cols); a.dataset.size = sq < 120 ? "xs" : sq < 190 ? "s" : "l";   // the grid is exactly as wide as its columns, so the squares form clean rows
 }
 window.addEventListener("resize", layoutSquares);
 if (window.ResizeObserver) { const _a = document.querySelector(".rm-arena"); if (_a) { new ResizeObserver(layoutSquares).observe(_a); new ResizeObserver(layoutSquares).observe(_a.parentElement); } }
@@ -184,6 +187,7 @@ async function submitBlob(blob) {
   setState("Transcribing what you said…"); const pend = logMsg("You", "Transcribing…", "c pend");
   try {
     const fd = new FormData(); fd.append("audio", blob, "answer.webm"); const r = await post(`/room/${SID}/stt/`, fd, true);
+    if (r.reliable === false && r.reason === "unreliable") { pend.remove(); phase = "answering"; toast(r.message || "I could not capture that clearly. Please say it again, or type your answer.", true); setState("I could not capture that clearly. Say it again, or type your answer below."); $("typebox").classList.add("show"); return; }   /* wrong language or low confidence: never scored */
     if (!r.heard || echoLike(r.text)) { pend.remove(); return noSpeech(); }
     pend.classList.remove("pend"); pend.lastChild.textContent = r.text; caption(r.text, true); miss = 0;
     const tg = interrupted ? "interrupted" : (answerStart && Date.now() - answerStart > 150000 ? "cut_off" : undefined); interrupted = false; next(r.text, tg);

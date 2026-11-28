@@ -26,7 +26,7 @@ AUDIO = b"x" * 5000
 def test_real_speech_is_returned_and_request_is_well_formed():
     srv = serve({"text": " I led the migration of our billing service to Postgres.", "segments": [{"start": 0, "end": 4, "no_speech_prob": 0.01, "avg_logprob": -0.2}]})
     r = stt.transcribe(AUDIO, "audio/webm;codecs=opus", "en-US", "Role: backend engineer"); srv.shutdown()
-    assert r == {"text": "I led the migration of our billing service to Postgres.", "heard": True, "reason": ""}
+    assert r["text"] == "I led the migration of our billing service to Postgres." and r["heard"] is True and r["reason"] == "" and r["reliable"] is True
     ctype, auth, body = SEEN[-1]
     assert ctype.startswith("multipart/form-data; boundary=") and auth == "Bearer k1"
     assert b'name="language"\r\n\r\nen' in body and b'filename="answer.webm"' in body and b"Role: backend engineer" in body and AUDIO in body

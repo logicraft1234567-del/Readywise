@@ -203,3 +203,15 @@ body.in-room .rm-live{height:100dvh;min-height:0}
 .b-brief{display:grid;gap:.55rem;font-size:.92rem;line-height:1.5}
 .b-row{display:grid;gap:.1rem}.b-row b{font-size:.78rem;font-weight:600;color:var(--mut)}
 .b-row code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.86rem;background:var(--chipbg);padding:.3rem .5rem;border-radius:var(--r1);overflow-wrap:anywhere;width:fit-content;max-width:100%}
+
+/* ---------- squares fill the screen, 2 across at most, and shrink on phones so everyone stays in view ---------- */
+.rm-arena{align-content:center;justify-content:center}
+.rm-arena[data-size="s"] .rm-plate{left:.4rem;right:.4rem;bottom:.4rem}.rm-arena[data-size="s"] .rm-plate small,.rm-arena[data-size="s"] .rm-bars{display:none}
+.rm-arena[data-size="s"] .rm-plate .who{padding:.2rem .45rem}.rm-arena[data-size="s"] .rm-plate b{font-size:.78rem}.rm-arena[data-size="s"] .rm-state{font-size:.62rem;padding:.1rem .35rem}
+.rm-arena[data-size="xs"] .rm-plate{left:.25rem;right:.25rem;bottom:.25rem}.rm-arena[data-size="xs"] .rm-plate small,.rm-arena[data-size="xs"] .rm-bars,.rm-arena[data-size="xs"] .rm-state,.rm-arena[data-size="xs"] .chip{display:none}
+.rm-arena[data-size="xs"] .rm-plate .who{padding:.1rem .35rem;border-radius:8px}.rm-arena[data-size="xs"] .rm-plate b{font-size:.68rem}
+.rm-arena[data-size="xs"] .rm-tile,.rm-arena[data-size="xs"] .rm-me-pip{border-radius:12px}
+@media (max-width:900px){
+  .rm-stagecol{padding:.5rem;gap:.4rem}.rm-arena{flex:1 1 0;min-height:0}
+  .rm-cap{min-height:2.6rem}.rm-cap p{font-size:.95rem;padding:.45rem .8rem}
+}
