@@ -1,5 +1,5 @@
 {% extends 'core/app_base.html' %}{% load static %}{% block title %}Dashboard: ReadyWise{% endblock %}
-{% block actions %}<a class="btn sm" href="{% url 'analytics' %}"><i data-lucide="chart-column" width="14"></i>Analytics</a>{% endblock %}
+{% block actions %}<a class="btn sm ico-m" href="{% url 'analytics' %}" aria-label="Analytics" title="Analytics"><i data-lucide="chart-column" width="14"></i><span class="bl">Analytics</span></a>{% endblock %}
 {% block content %}
 {% if not profile.full_name %}<a class="nudge" href="{% url 'welcome' %}"><i data-lucide="sparkles" width="18" style="color:var(--b1);flex:none"></i><span><b>Finish setting up your profile</b><small>One question at a time, about a minute. Skip anything.</small></span><span class="go">Start</span></a>{% endif %}
 {% if not profile.cv_text %}<div class="nudge" style="cursor:default"><i data-lucide="file-up" width="18" style="color:var(--b1)"></i><span class="text-sm">Add your CV so interviewers can ask about your real experience.</span><a class="btn sm ml-auto" href="{% url 'profile' %}">Add CV</a></div>{% endif %}

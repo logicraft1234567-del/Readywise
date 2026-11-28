@@ -454,3 +454,20 @@ body{overflow-x:clip}
   .hdr{position:sticky;top:0;z-index:35}
 }
 @media print{html,body,.app,.main,.side{height:auto!important;overflow:visible!important}}
+
+/* ---------- phones: more room in the headers ---------- */
+.nav-burger,.nm,.nm-bg{display:none}
+@media (max-width:760px){
+  /* public nav: only the logo mark, Log in and a menu button; the wordmark, theme toggle and Start free live in the menu */
+  .nav .logo-t,.nav .nav-theme,.nav .nav-start{display:none}
+  .nav .nav-burger{display:grid}
+  .nav .nav-login{font-weight:600}
+  .nm-bg{display:block;position:fixed;inset:0;z-index:70;background:rgba(10,16,32,.45);opacity:0;transition:opacity .22s}.nm-bg.open{opacity:1}.nm-bg[hidden],.nm[hidden]{display:none}
+  .nm{display:flex;flex-direction:column;gap:.15rem;position:fixed;top:0;right:0;bottom:0;z-index:75;width:min(300px,84vw);padding:.8rem 1rem calc(1rem + env(safe-area-inset-bottom,0px));background:var(--surface);border-left:1px solid var(--line);box-shadow:-18px 0 50px rgba(10,16,32,.25);overflow-y:auto;transform:translateX(100%);transition:transform .22s ease}.nm.open{transform:none}
+  .nm-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:.6rem}
+  .nm>a:not(.btn),.nm-theme{display:flex;align-items:center;gap:.6rem;padding:.8rem .6rem;min-height:44px;border-radius:10px;color:var(--ink);text-decoration:none;font:inherit;font-weight:500;background:transparent;border:0;text-align:left;cursor:pointer}
+  .nm>a:not(.btn):hover,.nm-theme:hover{background:var(--chipbg)}.nm .btn{margin-top:.8rem}
+  .nm-theme .sun{display:none}[data-theme=dark] .nm-theme .sun{display:inline-flex}[data-theme=dark] .nm-theme .moon{display:none}
+}
+/* signed-in app header on phones: the theme toggle moves to the More sheet so the search bar gets the space */
+@media (max-width:1000px){.hdr button[onclick="toggleTheme()"]{display:none}}

@@ -26,3 +26,7 @@ Not run in the authoring environment (Django was not installed and there was no 
 ## Interview room layout and fixed shell
 - `static/js/room.js` `layoutSquares`: the interviewers and the candidate are equal squares, never more than 2 across, as large as the screen allows (cap raised from 440px to 900px). On phones the squares shrink until everyone is on screen, and the name plates simplify at small sizes (`static/css/room.css`).
 - `static/css/app.css`: the header and sidebar no longer scroll with the page. Root cause: `body{overflow-x:hidden}` made the body its own scroll box, so `position:sticky` had nothing to stick to. On desktop the app is one screen tall and the sidebar and main column scroll separately; on mobile the header is pinned to the top.
+
+## Mobile headers
+- Dashboard: the Analytics button is icon-only on phones (label kept for screen readers), and the app header's theme toggle is hidden below 1000px, leaving the room to the search bar.
+- Public/landing nav on phones: the "ReadyWise" wordmark is hidden (logo mark only); the theme toggle, nav links and "Start free" move into a slide-in menu opened by a hamburger icon. "Log in" (or "Dashboard" when signed in) stays visible. Desktop is unchanged. (`base.html`, end of `static/css/app.css`)
